@@ -8,6 +8,7 @@ import struct
 import threading
 import time
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -105,7 +106,18 @@ def send_email_alert(alert: dict):
     except Exception as e:
         log.error(f"Error enviando email: {e}")
 
-app = FastAPI(title="Gateway Monitor")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    api_key = os.environ.get("CHIRPSTACK_API_KEY", "")
+    if api_key:
+        state["token"] = api_key
+        log.info("API key loaded from CHIRPSTACK_API_KEY env var")
+    t = threading.Thread(target=poll, daemon=True)
+    t.start()
+    log.info("Polling thread started — interval %ds", POLL_INTERVAL)
+    yield
+
+app = FastAPI(title="Gateway Monitor", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # ─── Proto / gRPC-web helpers ─────────────────────────────────────────────────
@@ -454,16 +466,6 @@ def api_test_email():
 def root():
     return FileResponse(os.path.join(BASE_DIR, "index.html"))
 
-@app.on_event("startup")
-def startup():
-    import os
-    api_key = os.environ.get("CHIRPSTACK_API_KEY", "")
-    if api_key:
-        state["token"] = api_key
-        log.info("API key loaded from environment")
-    t = threading.Thread(target=poll, daemon=True)
-    t.start()
-    log.info("Polling thread started — interval %ds", POLL_INTERVAL)
 
 if __name__ == "__main__":
     import uvicorn

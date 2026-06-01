@@ -6,4 +6,4 @@ services:
     startCommand: python backend.py
     envVars:
       - key: CHIRPSTACK_API_KEY
-        value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJjaGlycHN0YWNrIiwiaXNzIjoiY2hpcnBzdGFjayIsInN1YiI6Ijg1M2E0ZTFjLTY1OGEtNDRhNy04MGI4LWJhNjJhZGVhYzJkOCIsInR5cCI6ImtleSJ9.QBJ1ew9RY3syb-jHS2DbzEUXjLu6sHdoLnfulH4EFn8
+        sync: false
