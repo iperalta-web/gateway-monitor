@@ -183,6 +183,13 @@ main { overflow: hidden; position: relative; }
     <span id="last-poll"></span>
     <div class="header-right">
       <span id="user-name"></span>
+      <div style="display:flex;align-items:center;gap:5px;font-size:0.78rem;color:#8b949e">
+        📡
+        <input type="range" id="range-km" min="1" max="30" value="5"
+          style="width:70px;accent-color:#58a6ff;cursor:pointer"
+          oninput="updateCoverageRadius(this.value)"/>
+        <span id="km-label" style="min-width:32px;color:#58a6ff;font-weight:600">5 km</span>
+      </div>
       <button class="btn-sm" id="btn-admin" onclick="openAdmin()" style="display:none">👥 Usuarios</button>
       <button class="btn-sm" onclick="openEmail()">📧 Email</button>
       <button class="btn-sm" onclick="doLogout()">Salir</button>
@@ -277,7 +284,9 @@ let token = localStorage.getItem('gw_token') || '';
 let currentUser = null;
 let selectedGw = null;
 let markers = {};
+let coverageCircles = {};
 let knownAlerts = 0;
+let coverageRadius = parseInt(localStorage.getItem('gw_coverage_km') || '5') * 1000; // metros
 
 // ── Map init ──────────────────────────────────────────────────────────────────
 const map = L.map('map').setView([20.5, -100], 5);
@@ -332,6 +341,10 @@ function showApp() {
   }
   // Force Leaflet to recalculate map size after container becomes visible
   setTimeout(() => map.invalidateSize(), 100);
+  // Init coverage slider
+  const savedKm = parseInt(localStorage.getItem('gw_coverage_km') || '5');
+  document.getElementById('range-km').value = savedKm;
+  document.getElementById('km-label').textContent = savedKm + ' km';
   startPolling();
 }
 
@@ -374,6 +387,7 @@ async function fetchAll() {
 // ── Render gateways ───────────────────────────────────────────────────────────
 function renderGateways(gws) {
   const list = document.getElementById('gw-list');
+  list.__gws = gws;
   list.innerHTML = '';
   if (!gws.length) { list.innerHTML = '<div class="no-alerts">Sin gateways</div>'; return; }
   gws.sort((a,b)=>({'OFFLINE':0,'ONLINE':1,'NEVER_SEEN':2}[a.state]??9)-({'OFFLINE':0,'ONLINE':1,'NEVER_SEEN':2}[b.state]??9));
@@ -400,14 +414,44 @@ function renderGateways(gws) {
 function updateMarker(gw) {
   const lat = parseFloat(gw.latitude)||0, lng = parseFloat(gw.longitude)||0;
   if (!lat && !lng) return;
-  const color = gw.state==='ONLINE'?'#56d364':gw.state==='OFFLINE'?'#f85149':'#6e7681';
-  const icon = L.divIcon({className:'', html:`<div style="width:13px;height:13px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 0 8px ${color}88"></div>`, iconSize:[13,13], iconAnchor:[6,6]});
-  const popup = `<div style="font-weight:700">${esc(gw.name)}</div>
-    <div style="font-family:monospace;font-size:.75em;color:#8b949e">${esc(gw.gateway_id)}</div>
-    <div style="color:${color};margin-top:4px">● ${gw.state==='ONLINE'?'En línea':gw.state==='OFFLINE'?'Offline':'Sin datos'}</div>
-    <div style="font-size:.73em;color:#8b949e;margin-top:3px">${lat.toFixed(5)}, ${lng.toFixed(5)}</div>`;
-  if (markers[gw.gateway_id]) markers[gw.gateway_id].setLatLng([lat,lng]).setIcon(icon).setPopupContent(popup);
-  else markers[gw.gateway_id] = L.marker([lat,lng],{icon}).addTo(map).bindPopup(popup);
+  const color      = gw.state==='ONLINE'?'#56d364':gw.state==='OFFLINE'?'#f85149':'#6e7681';
+  const fillColor  = gw.state==='ONLINE'?'#56d364':gw.state==='OFFLINE'?'#f85149':'#6e7681';
+  const kmLabel    = (coverageRadius/1000).toFixed(0);
+  const icon = L.divIcon({className:'', html:`<div style="width:14px;height:14px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 0 10px ${color}99;position:relative;z-index:1000"></div>`, iconSize:[14,14], iconAnchor:[7,7]});
+  const popup = `
+    <div style="font-weight:700;font-size:.95em">${esc(gw.name)}</div>
+    <div style="font-family:monospace;font-size:.73em;color:#8b949e">${esc(gw.gateway_id)}</div>
+    <div style="color:${color};margin-top:5px;font-weight:600">● ${gw.state==='ONLINE'?'En línea':gw.state==='OFFLINE'?'Offline':'Sin datos'}</div>
+    <div style="font-size:.75em;color:#8b949e;margin-top:3px">📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}</div>
+    <div style="font-size:.75em;color:#8b949e;margin-top:2px">📡 Cobertura aprox. ~${kmLabel} km</div>
+    ${gw.last_seen_at?`<div style="font-size:.73em;color:#6e7681;margin-top:3px">Visto: ${new Date(gw.last_seen_at).toLocaleString('es-MX')}</div>`:''}`;
+
+  // Marker
+  if (markers[gw.gateway_id]) {
+    markers[gw.gateway_id].setLatLng([lat,lng]).setIcon(icon).setPopupContent(popup);
+  } else {
+    markers[gw.gateway_id] = L.marker([lat,lng],{icon,zIndexOffset:1000}).addTo(map).bindPopup(popup);
+  }
+
+  // Coverage circle
+  const circleOptions = {
+    radius: coverageRadius,
+    color: fillColor,
+    fillColor: fillColor,
+    fillOpacity: gw.state==='ONLINE' ? 0.08 : 0.04,
+    weight: gw.state==='ONLINE' ? 1.5 : 1,
+    opacity: gw.state==='ONLINE' ? 0.5 : 0.3,
+    dashArray: gw.state==='OFFLINE' ? '6,4' : null,
+  };
+  if (coverageCircles[gw.gateway_id]) {
+    coverageCircles[gw.gateway_id].setLatLng([lat,lng]).setStyle(circleOptions).setRadius(coverageRadius);
+  } else {
+    coverageCircles[gw.gateway_id] = L.circle([lat,lng], circleOptions).addTo(map);
+    coverageCircles[gw.gateway_id].bindTooltip(
+      `📡 ${esc(gw.name)} — ~${kmLabel} km`,
+      {permanent:false, direction:'top', className:''}
+    );
+  }
 }
 
 function focusGw(gw, el) {
@@ -547,6 +591,18 @@ async function testEmail() {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+function updateCoverageRadius(km) {
+  coverageRadius = parseInt(km) * 1000;
+  localStorage.setItem('gw_coverage_km', km);
+  document.getElementById('km-label').textContent = km + ' km';
+  document.getElementById('range-km').value = km;
+  // Redraw all circles
+  Object.keys(coverageCircles).forEach(id => { coverageCircles[id].remove(); delete coverageCircles[id]; });
+  // Re-trigger marker update with latest gateways
+  const gws = document.getElementById('gw-list').__gws || [];
+  gws.forEach(gw => updateMarker(gw));
+}
+
 function openModal(id)  { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 function setStatus(id, msg, ok) { const el=document.getElementById(id); el.textContent=msg; el.className='modal-status '+(ok?'ok':'err'); }
