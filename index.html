@@ -7,642 +7,561 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f1117; color: #e1e4e8; min-height: 100vh; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f1117; color: #e1e4e8; min-height: 100vh; }
 
-  /* ── Header ── */
-  header {
-    background: #161b22;
-    border-bottom: 1px solid #30363d;
-    padding: 14px 24px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-  .logo { font-size: 1.2rem; font-weight: 700; color: #58a6ff; }
-  .logo span { color: #8b949e; font-weight: 400; font-size: 0.9rem; }
-  .header-status { margin-left: auto; display: flex; gap: 12px; align-items: center; }
-  .pill {
-    padding: 4px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: 600;
-    letter-spacing: .3px;
-  }
-  .pill-green  { background: #0d1f0d; color: #56d364; border: 1px solid #238636; }
-  .pill-red    { background: #1f0d0d; color: #f85149; border: 1px solid #da3633; }
-  .pill-gray   { background: #1c2128; color: #8b949e; border: 1px solid #30363d; }
-  .pill-blue   { background: #0d1f3c; color: #58a6ff; border: 1px solid #1f6feb; }
+/* ── Login page ── */
+#login-page {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at 60% 40%, #0d1f3c 0%, #0f1117 70%);
+}
+.login-card {
+  background: #161b22; border: 1px solid #30363d; border-radius: 14px;
+  padding: 40px 36px; width: 380px; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+.login-logo { text-align: center; margin-bottom: 28px; }
+.login-logo .icon { font-size: 2.5rem; }
+.login-logo h1 { font-size: 1.3rem; color: #e1e4e8; margin-top: 8px; }
+.login-logo p  { font-size: 0.82rem; color: #6e7681; margin-top: 4px; }
+label { display: block; font-size: 0.8rem; color: #8b949e; margin-bottom: 5px; }
+input[type=text], input[type=password], input[type=email] {
+  width: 100%; padding: 9px 12px; background: #0d1117; border: 1px solid #30363d;
+  border-radius: 7px; color: #e1e4e8; font-size: 0.9rem; outline: none; margin-bottom: 14px;
+}
+input:focus { border-color: #58a6ff; }
+.btn-primary {
+  width: 100%; padding: 10px; background: #1f6feb; color: #fff; border: none;
+  border-radius: 7px; font-size: 0.92rem; cursor: pointer; font-weight: 600; transition: background .15s;
+}
+.btn-primary:hover { background: #388bfd; }
+.login-error { color: #f85149; font-size: 0.82rem; margin-top: 8px; min-height: 18px; text-align: center; }
 
-  /* ── Login overlay ── */
-  #login-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,.75);
-    display: flex; align-items: center; justify-content: center; z-index: 9999;
-  }
-  .login-box {
-    background: #161b22; border: 1px solid #30363d; border-radius: 12px;
-    padding: 32px; width: 380px;
-  }
-  .login-box h2 { font-size: 1.1rem; margin-bottom: 8px; color: #e1e4e8; }
-  .login-box p { color: #8b949e; font-size: 0.85rem; margin-bottom: 20px; line-height: 1.5; }
-  .tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 1px solid #30363d; }
-  .tab { padding: 8px 16px; cursor: pointer; font-size: 0.85rem; color: #8b949e; border-bottom: 2px solid transparent; }
-  .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
-  .tab-pane { display: none; }
-  .tab-pane.active { display: block; }
-  label { display: block; font-size: 0.8rem; color: #8b949e; margin-bottom: 4px; }
-  input[type=text], input[type=password], input[type=email] {
-    width: 100%; padding: 8px 12px; background: #0d1117; border: 1px solid #30363d;
-    border-radius: 6px; color: #e1e4e8; font-size: 0.9rem; outline: none;
-    margin-bottom: 12px;
-  }
-  input:focus { border-color: #58a6ff; }
-  .btn-primary {
-    width: 100%; padding: 9px; background: #1f6feb; color: #fff; border: none;
-    border-radius: 6px; font-size: 0.9rem; cursor: pointer; font-weight: 600;
-    transition: background .15s;
-  }
-  .btn-primary:hover { background: #388bfd; }
-  #login-error { color: #f85149; font-size: 0.82rem; margin-top: 8px; min-height: 18px; }
+/* ── App (hidden until logged in) ── */
+#app { display: none; flex-direction: column; height: 100vh; }
 
-  /* ── Layout ── */
-  .layout { display: grid; grid-template-columns: 340px 1fr; height: calc(100vh - 53px); }
+/* ── Header ── */
+header {
+  background: #161b22; border-bottom: 1px solid #30363d;
+  padding: 0 20px; height: 52px; display: flex; align-items: center; gap: 14px; flex-shrink: 0;
+}
+.logo { font-size: 1.1rem; font-weight: 700; color: #58a6ff; white-space: nowrap; }
+.logo span { color: #8b949e; font-weight: 400; font-size: 0.85rem; }
+.header-right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.pill { padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+.pill-green { background:#0d1f0d; color:#56d364; border:1px solid #238636; }
+.pill-red   { background:#1f0d0d; color:#f85149; border:1px solid #da3633; }
+.pill-gray  { background:#1c2128; color:#8b949e; border:1px solid #30363d; }
+.pill-blue  { background:#0d1f3c; color:#58a6ff; border:1px solid #1f6feb; }
+#user-name  { font-size: 0.82rem; color: #8b949e; }
+.btn-sm {
+  padding: 5px 12px; border-radius: 6px; font-size: 0.78rem; cursor: pointer;
+  border: 1px solid #30363d; background: #21262d; color: #e1e4e8;
+}
+.btn-sm:hover { background: #30363d; }
+#last-poll { font-size: 0.72rem; color: #6e7681; }
 
-  /* ── Sidebar ── */
-  .sidebar {
-    background: #0d1117; border-right: 1px solid #30363d;
-    display: flex; flex-direction: column; overflow: hidden;
-  }
-  .sidebar-header {
-    padding: 14px 16px; border-bottom: 1px solid #30363d;
-    display: flex; align-items: center; justify-content: space-between;
-  }
-  .sidebar-title { font-size: 0.85rem; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: .5px; }
-  .stats-row { display: flex; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #30363d; flex-wrap: wrap; }
-  .stat-card { flex: 1; min-width: 70px; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 8px 10px; text-align: center; }
-  .stat-card .num { font-size: 1.4rem; font-weight: 700; }
-  .stat-card .lbl { font-size: 0.7rem; color: #8b949e; margin-top: 2px; }
-  .num-green { color: #56d364; }
-  .num-red   { color: #f85149; }
-  .num-gray  { color: #8b949e; }
-  .num-blue  { color: #58a6ff; }
+/* ── Layout ── */
+.layout { display: grid; grid-template-columns: 330px 1fr; flex: 1; overflow: hidden; }
 
-  .gw-list { overflow-y: auto; flex: 1; }
-  .gw-item {
-    padding: 12px 16px; border-bottom: 1px solid #21262d; cursor: pointer;
-    transition: background .1s; display: flex; align-items: flex-start; gap: 10px;
-  }
-  .gw-item:hover { background: #161b22; }
-  .gw-item.selected { background: #0d1f3c; border-left: 3px solid #58a6ff; }
-  .gw-dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
-  .dot-online  { background: #56d364; box-shadow: 0 0 6px #56d36488; }
-  .dot-offline { background: #f85149; box-shadow: 0 0 6px #f8514988; }
-  .dot-never   { background: #6e7681; }
-  .gw-info { flex: 1; min-width: 0; }
-  .gw-name { font-size: 0.88rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .gw-id   { font-size: 0.72rem; color: #6e7681; font-family: monospace; margin-top: 2px; }
-  .gw-time { font-size: 0.72rem; color: #8b949e; margin-top: 4px; }
-  .gw-badge { font-size: 0.68rem; padding: 1px 6px; border-radius: 10px; font-weight: 600; align-self: center; }
-  .badge-online  { background: #0d1f0d; color: #56d364; border: 1px solid #238636; }
-  .badge-offline { background: #1f0d0d; color: #f85149; border: 1px solid #da3633; }
-  .badge-never   { background: #1c2128; color: #6e7681; border: 1px solid #30363d; }
+/* ── Sidebar ── */
+.sidebar { background: #0d1117; border-right: 1px solid #30363d; display: flex; flex-direction: column; overflow: hidden; }
+.sidebar-section-title {
+  padding: 10px 16px; font-size: 0.75rem; font-weight: 600; color: #6e7681;
+  text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid #21262d;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.stats-row { display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid #21262d; }
+.stat-card { flex: 1; background: #161b22; border: 1px solid #30363d; border-radius: 7px; padding: 7px 8px; text-align: center; }
+.stat-card .num { font-size: 1.3rem; font-weight: 700; }
+.stat-card .lbl { font-size: 0.68rem; color: #8b949e; margin-top: 1px; }
+.num-green{color:#56d364} .num-red{color:#f85149} .num-gray{color:#8b949e} .num-blue{color:#58a6ff}
 
-  /* ── Alerts panel ── */
-  .alerts-section { border-top: 1px solid #30363d; max-height: 200px; overflow-y: auto; }
-  .alerts-header {
-    padding: 10px 16px; display: flex; align-items: center; justify-content: space-between;
-    background: #161b22; border-bottom: 1px solid #30363d; position: sticky; top: 0; z-index: 1;
-  }
-  .alerts-title { font-size: 0.8rem; font-weight: 600; color: #8b949e; text-transform: uppercase; }
-  .btn-clear { font-size: 0.72rem; color: #6e7681; background: none; border: none; cursor: pointer; }
-  .btn-clear:hover { color: #f85149; }
-  .alert-item { padding: 8px 16px; border-bottom: 1px solid #21262d; font-size: 0.78rem; }
-  .alert-item .al-time { color: #6e7681; font-size: 0.7rem; }
-  .alert-offline { color: #f85149; }
-  .alert-online  { color: #56d364; }
-  .no-alerts { padding: 12px 16px; font-size: 0.8rem; color: #6e7681; text-align: center; }
+.gw-list { overflow-y: auto; flex: 1; }
+.gw-item {
+  padding: 10px 14px; border-bottom: 1px solid #21262d; cursor: pointer;
+  transition: background .1s; display: flex; align-items: flex-start; gap: 9px;
+}
+.gw-item:hover { background: #161b22; }
+.gw-item.selected { background: #0d1f3c; border-left: 3px solid #58a6ff; }
+.gw-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+.dot-online  { background:#56d364; box-shadow:0 0 5px #56d36488; }
+.dot-offline { background:#f85149; box-shadow:0 0 5px #f8514988; }
+.dot-never   { background:#6e7681; }
+.gw-info { flex: 1; min-width: 0; }
+.gw-name { font-size: 0.86rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gw-id   { font-size: 0.7rem; color: #6e7681; font-family: monospace; margin-top: 1px; }
+.gw-time { font-size: 0.7rem; color: #8b949e; margin-top: 3px; }
+.gw-badge { font-size: 0.66rem; padding: 1px 6px; border-radius: 10px; font-weight: 600; align-self: center; flex-shrink: 0; }
+.badge-online  { background:#0d1f0d; color:#56d364; border:1px solid #238636; }
+.badge-offline { background:#1f0d0d; color:#f85149; border:1px solid #da3633; }
+.badge-never   { background:#1c2128; color:#6e7681; border:1px solid #30363d; }
 
-  /* ── Map ── */
-  #map { height: 100%; width: 100%; }
+/* ── Alerts ── */
+.alerts-section { border-top: 1px solid #30363d; max-height: 190px; overflow-y: auto; flex-shrink: 0; }
+.alert-item { padding: 7px 14px; border-bottom: 1px solid #21262d; font-size: 0.77rem; }
+.alert-offline { color: #f85149; } .alert-online { color: #56d364; }
+.al-time { color: #6e7681; font-size: 0.68rem; }
+.no-alerts { padding: 12px 14px; font-size: 0.78rem; color: #6e7681; text-align: center; }
+.btn-clear { font-size: 0.7rem; color: #6e7681; background: none; border: none; cursor: pointer; }
+.btn-clear:hover { color: #f85149; }
 
-  /* ── Email config modal ── */
-  #email-modal {
-    position: fixed; inset: 0; background: rgba(0,0,0,.6);
-    display: none; align-items: center; justify-content: center; z-index: 7000;
-  }
-  #email-modal.open { display: flex; }
-  .modal-box {
-    background: #161b22; border: 1px solid #30363d; border-radius: 12px;
-    padding: 28px; width: 420px; max-width: 95vw;
-  }
-  .modal-box h3 { font-size: 1rem; margin-bottom: 6px; }
-  .modal-box p { color: #8b949e; font-size: 0.82rem; margin-bottom: 18px; line-height: 1.5; }
-  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .btn-secondary {
-    padding: 8px 16px; background: #21262d; color: #e1e4e8; border: 1px solid #30363d;
-    border-radius: 6px; font-size: 0.85rem; cursor: pointer;
-  }
-  .btn-secondary:hover { background: #30363d; }
-  .btn-danger { background: #21120d; color: #f85149; border-color: #5a1d1d; }
-  .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
-  #email-status { font-size: 0.8rem; margin-top: 8px; min-height: 18px; }
-  .email-ok  { color: #56d364; }
-  .email-err { color: #f85149; }
+/* ── Map ── */
+#map { height: 100%; width: 100%; }
 
-  /* ── Toast notifications ── */
-  #toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 8000; display: flex; flex-direction: column; gap: 8px; }
-  .toast {
-    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
-    padding: 12px 16px; min-width: 280px; max-width: 380px;
-    font-size: 0.85rem; animation: slideIn .2s ease;
-    display: flex; align-items: flex-start; gap: 10px;
-  }
-  .toast-offline { border-left: 3px solid #f85149; }
-  .toast-online  { border-left: 3px solid #56d364; }
-  .toast-icon { font-size: 1.1rem; flex-shrink: 0; }
-  .toast-close { margin-left: auto; cursor: pointer; color: #6e7681; padding: 0 4px; }
-  @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+/* ── Modals ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.65);
+  display: none; align-items: center; justify-content: center; z-index: 9000;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+  padding: 28px; width: 460px; max-width: 96vw; max-height: 90vh; overflow-y: auto;
+}
+.modal-box h3 { font-size: 1rem; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+.btn-danger { background: #21120d; color: #f85149; border: 1px solid #5a1d1d; border-radius: 6px; padding: 5px 12px; font-size: 0.8rem; cursor: pointer; }
+.btn-danger:hover { background: #2d1511; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.modal-status { font-size: 0.8rem; margin-top: 8px; min-height: 18px; }
+.ok  { color: #56d364; } .err { color: #f85149; }
 
-  /* ── Scrollbar ── */
-  ::-webkit-scrollbar { width: 6px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+/* ── User table ── */
+.user-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.83rem; }
+.user-table th { text-align: left; padding: 6px 10px; color: #6e7681; font-weight: 600; border-bottom: 1px solid #30363d; font-size: 0.75rem; text-transform: uppercase; }
+.user-table td { padding: 8px 10px; border-bottom: 1px solid #21262d; }
+.user-table tr:hover td { background: #161b22; }
+.role-badge { padding: 2px 8px; border-radius: 10px; font-size: 0.72rem; font-weight: 600; }
+.role-admin  { background:#0d1f3c; color:#58a6ff; border:1px solid #1f6feb; }
+.role-viewer { background:#1c2128; color:#8b949e; border:1px solid #30363d; }
 
-  /* ── Gateway popup map ── */
-  .leaflet-popup-content-wrapper { background: #161b22; color: #e1e4e8; border: 1px solid #30363d; }
-  .leaflet-popup-tip { background: #161b22; }
-  .gw-popup-name { font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; }
-  .gw-popup-id   { font-family: monospace; font-size: 0.75rem; color: #8b949e; }
-  .gw-popup-state { margin-top: 6px; font-size: 0.8rem; }
+/* ── Toast ── */
+#toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 8000; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  background:#161b22; border:1px solid #30363d; border-radius:8px;
+  padding:12px 14px; min-width:270px; max-width:360px; font-size:0.83rem;
+  animation: slideIn .2s ease; display:flex; align-items:flex-start; gap:10px;
+}
+.toast-offline { border-left:3px solid #f85149; }
+.toast-online  { border-left:3px solid #56d364; }
+.toast-close { margin-left:auto; cursor:pointer; color:#6e7681; padding:0 4px; }
+@keyframes slideIn { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
 
-  /* Last poll indicator */
-  #last-poll { font-size: 0.72rem; color: #6e7681; }
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-track{background:transparent} ::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px}
+.leaflet-popup-content-wrapper{background:#161b22;color:#e1e4e8;border:1px solid #30363d}
+.leaflet-popup-tip{background:#161b22}
 </style>
 </head>
 <body>
 
-<!-- Login Overlay -->
-<div id="login-overlay">
-  <div class="login-box">
-    <h2>🛰 Gateway Monitor</h2>
-    <p>Conecta con tu instancia de ChirpStack para monitorear tus gateways en tiempo real.</p>
-    <div class="tabs">
-      <div class="tab active" onclick="switchTab('apikey')">API Key</div>
-      <div class="tab" onclick="switchTab('login')">Usuario / Contraseña</div>
+<!-- ── LOGIN PAGE ─────────────────────────────────────────────────────────── -->
+<div id="login-page">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="icon">🛰</div>
+      <h1>Gateway Monitor</h1>
+      <p>IotNet — ChirpStack LoRaWAN</p>
     </div>
-    <div id="tab-apikey" class="tab-pane active">
-      <label>API Key de ChirpStack</label>
-      <input type="password" id="api-key-input" placeholder="eyJ0eXAiOiJKV1Qi..." />
-      <p style="font-size:0.77rem;color:#8b949e;margin-bottom:12px;">
-        Obtén tu API Key en ChirpStack → <strong>Administration → API Keys → Add API Key</strong>.
-        Copia el token generado y pégalo aquí.
-      </p>
-      <button class="btn-primary" onclick="authWithApiKey()">Conectar</button>
-    </div>
-    <div id="tab-login" class="tab-pane">
-      <label>Email</label>
-      <input type="email" id="login-email" placeholder="usuario@dominio.com" value="iperalta@iotnet.mx"/>
-      <label>Contraseña</label>
-      <input type="password" id="login-password" placeholder="••••••••"/>
-      <button class="btn-primary" onclick="authWithLogin()">Iniciar sesión</button>
-    </div>
-    <div id="login-error"></div>
+    <label>Usuario</label>
+    <input type="text" id="login-user" placeholder="usuario" autocomplete="username"/>
+    <label>Contraseña</label>
+    <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"/>
+    <button class="btn-primary" onclick="doLogin()">Iniciar sesión</button>
+    <div class="login-error" id="login-err"></div>
   </div>
 </div>
 
-<!-- Email config modal -->
-<div id="email-modal">
-  <div class="modal-box">
-    <h3>📧 Configurar Alertas por Correo</h3>
-    <p>Las alertas se envían cuando un gateway se desconecta o reconecta.<br>
-       Para Gmail usa una <strong>Contraseña de Aplicación</strong> (no tu contraseña normal).</p>
-    <div class="form-row">
-      <div>
-        <label>Servidor SMTP</label>
-        <input type="text" id="smtp-host" value="smtp.gmail.com"/>
-      </div>
-      <div>
-        <label>Puerto</label>
-        <input type="text" id="smtp-port" value="587"/>
-      </div>
-    </div>
-    <label>Usuario SMTP (tu email)</label>
-    <input type="email" id="smtp-user" placeholder="tu@gmail.com"/>
-    <label>Contraseña de Aplicación</label>
-    <input type="password" id="smtp-pass" placeholder="xxxx xxxx xxxx xxxx"/>
-    <label>De (remitente)</label>
-    <input type="email" id="email-from" placeholder="alertas@tudominio.com"/>
-    <label>Para (destinatarios, separar con coma)</label>
-    <input type="email" id="email-to" placeholder="iperalta@iotnet.mx, otro@correo.com"/>
-    <div id="email-status"></div>
-    <div class="modal-footer">
-      <button class="btn-secondary" onclick="testEmail()">Enviar prueba</button>
-      <button class="btn-secondary" onclick="closeEmailModal()">Cancelar</button>
-      <button class="btn-primary" style="width:auto;padding:8px 20px" onclick="saveEmailConfig()">Guardar</button>
-    </div>
-  </div>
-</div>
+<!-- ── MAIN APP ───────────────────────────────────────────────────────────── -->
+<div id="app">
 
-<!-- Header -->
-<header>
-  <div class="logo">🛰 Gateway Monitor <span>/ IotNet — ChirpStack</span></div>
-  <div class="header-status">
-    <span id="conn-status" class="pill pill-gray">Desconectado</span>
+  <!-- Header -->
+  <header>
+    <div class="logo">🛰 Gateway Monitor <span>/ IotNet</span></div>
+    <span id="conn-pill" class="pill pill-gray">Cargando…</span>
     <span id="last-poll"></span>
-    <button class="btn-secondary" onclick="openEmailModal()" style="font-size:0.8rem;padding:5px 12px">📧 Alertas Email</button>
+    <div class="header-right">
+      <span id="user-name"></span>
+      <button class="btn-sm" id="btn-admin" onclick="openAdmin()" style="display:none">👥 Usuarios</button>
+      <button class="btn-sm" onclick="openEmail()">📧 Email</button>
+      <button class="btn-sm" onclick="doLogout()">Salir</button>
+    </div>
+  </header>
+
+  <!-- Layout -->
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-section-title">
+        Gateways
+        <span id="gw-count-pill" class="pill pill-gray">0</span>
+      </div>
+      <div class="stats-row">
+        <div class="stat-card"><div class="num num-blue"  id="s-total">0</div><div class="lbl">Total</div></div>
+        <div class="stat-card"><div class="num num-green" id="s-online">0</div><div class="lbl">Online</div></div>
+        <div class="stat-card"><div class="num num-red"   id="s-offline">0</div><div class="lbl">Offline</div></div>
+        <div class="stat-card"><div class="num num-gray"  id="s-never">0</div><div class="lbl">Sin datos</div></div>
+      </div>
+      <div class="gw-list" id="gw-list"></div>
+      <div class="alerts-section">
+        <div class="sidebar-section-title">
+          🔔 Alertas
+          <button class="btn-clear" id="btn-clear-alerts" onclick="clearAlerts()">Limpiar</button>
+        </div>
+        <div id="alerts-list"></div>
+      </div>
+    </aside>
+
+    <!-- Map -->
+    <main><div id="map"></div></main>
   </div>
-</header>
-
-<!-- Main layout -->
-<div class="layout">
-  <!-- Sidebar -->
-  <aside class="sidebar">
-    <div class="sidebar-header">
-      <span class="sidebar-title">Gateways</span>
-      <span id="gw-count" class="pill pill-gray">0</span>
-    </div>
-    <div class="stats-row">
-      <div class="stat-card">
-        <div class="num num-blue" id="stat-total">0</div>
-        <div class="lbl">Total</div>
-      </div>
-      <div class="stat-card">
-        <div class="num num-green" id="stat-online">0</div>
-        <div class="lbl">Online</div>
-      </div>
-      <div class="stat-card">
-        <div class="num num-red" id="stat-offline">0</div>
-        <div class="lbl">Offline</div>
-      </div>
-      <div class="stat-card">
-        <div class="num num-gray" id="stat-never">0</div>
-        <div class="lbl">Sin datos</div>
-      </div>
-    </div>
-    <div class="gw-list" id="gw-list"></div>
-    <div class="alerts-section">
-      <div class="alerts-header">
-        <span class="alerts-title">🔔 Alertas</span>
-        <button class="btn-clear" onclick="clearAlerts()">Limpiar</button>
-      </div>
-      <div id="alerts-list"></div>
-    </div>
-  </aside>
-
-  <!-- Map -->
-  <main>
-    <div id="map"></div>
-  </main>
 </div>
 
-<!-- Toast container -->
+<!-- ── ADMIN MODAL ────────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="admin-modal">
+  <div class="modal-box" style="width:540px">
+    <h3>👥 Administración de Usuarios</h3>
+    <div id="user-table-wrap"></div>
+    <hr style="border-color:#30363d;margin:18px 0 14px">
+    <div style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:#8b949e">AGREGAR USUARIO</div>
+    <div class="form-row">
+      <div><label>Usuario</label><input type="text" id="nu-user" placeholder="juan"/></div>
+      <div><label>Nombre</label><input type="text" id="nu-name" placeholder="Juan Pérez"/></div>
+    </div>
+    <div class="form-row">
+      <div><label>Contraseña</label><input type="password" id="nu-pass" placeholder="mínimo 6 caracteres"/></div>
+      <div>
+        <label>Rol</label>
+        <select id="nu-role" style="width:100%;padding:9px 10px;background:#0d1117;border:1px solid #30363d;border-radius:7px;color:#e1e4e8;font-size:0.9rem;margin-bottom:14px">
+          <option value="viewer">Viewer (solo lectura)</option>
+          <option value="admin">Admin (acceso total)</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-status" id="admin-status"></div>
+    <div class="modal-footer">
+      <button class="btn-sm" onclick="closeModal('admin-modal')">Cerrar</button>
+      <button class="btn-primary" style="width:auto;padding:8px 20px" onclick="createUser()">Crear usuario</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── EMAIL MODAL ────────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="email-modal">
+  <div class="modal-box">
+    <h3>📧 Alertas por Correo</h3>
+    <div class="form-row">
+      <div><label>Servidor SMTP</label><input type="text" id="smtp-host" value="smtp.gmail.com"/></div>
+      <div><label>Puerto</label><input type="text" id="smtp-port" value="587"/></div>
+    </div>
+    <label>Usuario SMTP</label><input type="email" id="smtp-user" placeholder="tu@gmail.com"/>
+    <label>Contraseña de Aplicación</label><input type="password" id="smtp-pass" placeholder="xxxx xxxx xxxx xxxx"/>
+    <label>De (remitente)</label><input type="email" id="email-from" placeholder="alertas@dominio.com"/>
+    <label>Para (separar con coma)</label><input type="text" id="email-to" placeholder="iperalta@iotnet.mx"/>
+    <div class="modal-status" id="email-status"></div>
+    <div class="modal-footer">
+      <button class="btn-sm" onclick="closeModal('email-modal')">Cancelar</button>
+      <button class="btn-sm" onclick="testEmail()">Enviar prueba</button>
+      <button class="btn-primary" style="width:auto;padding:8px 20px" onclick="saveEmail()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST ──────────────────────────────────────────────────────────────── -->
 <div id="toast-container"></div>
 
 <script>
 const API = '';
-let map, markers = {}, selectedGw = null;
-let knownAlertCount = 0;
-let isAuthenticated = false;
+let token = localStorage.getItem('gw_token') || '';
+let currentUser = null;
+let selectedGw = null;
+let markers = {};
+let knownAlerts = 0;
 
-// ── Auto-connect if backend already authenticated ─────────────────────────────
-(async () => {
-  try {
-    const r = await fetch(`${API}/status`);
-    const d = await r.json();
-    if (d.authenticated) { hideLogin(); startPolling(); }
-  } catch(e) {}
-})();
-
-// ── Init map ──────────────────────────────────────────────────────────────────
-map = L.map('map', { zoomControl: true }).setView([20.5, -100], 5);
+// ── Map init ──────────────────────────────────────────────────────────────────
+const map = L.map('map').setView([20.5, -100], 5);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© <a href="https://osm.org/copyright">OpenStreetMap</a>',
-  maxZoom: 19,
+  attribution: '© <a href="https://osm.org/copyright">OpenStreetMap</a>', maxZoom: 19
 }).addTo(map);
 
-// ── Auth ─────────────────────────────────────────────────────────────────────
-function switchTab(name) {
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['apikey','login'][i] === name));
-  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-  document.getElementById(`tab-${name}`).classList.add('active');
-}
-
-async function authWithApiKey() {
-  const key = document.getElementById('api-key-input').value.trim();
-  if (!key) { showLoginError('Ingresa tu API Key'); return; }
-  try {
-    const r = await fetch(`${API}/auth/apikey`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ api_key: key })
-    });
-    const d = await r.json();
-    if (d.ok) { hideLogin(); startPolling(); }
-    else showLoginError(d.detail || 'Error al conectar');
-  } catch(e) { showLoginError('No se pudo conectar con el servidor local. ¿Está corriendo el backend?'); }
-}
-
-async function authWithLogin() {
-  const email = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
-  if (!email || !password) { showLoginError('Ingresa email y contraseña'); return; }
+// ── Auth ──────────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const username = document.getElementById('login-user').value.trim();
+  const password = document.getElementById('login-pass').value;
+  document.getElementById('login-err').textContent = '';
+  if (!username || !password) { document.getElementById('login-err').textContent = 'Ingresa usuario y contraseña'; return; }
   try {
     const r = await fetch(`${API}/auth/login`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({username, password})
     });
     const d = await r.json();
-    if (r.ok && d.ok) { hideLogin(); startPolling(); }
-    else showLoginError(d.detail || 'Credenciales incorrectas');
-  } catch(e) { showLoginError('No se pudo conectar con el servidor local.'); }
+    if (!r.ok) { document.getElementById('login-err').textContent = d.detail || 'Error'; return; }
+    token = d.token;
+    localStorage.setItem('gw_token', token);
+    currentUser = {username, role: d.role, name: d.name};
+    showApp();
+  } catch(e) { document.getElementById('login-err').textContent = 'No se pudo conectar'; }
 }
 
-function showLoginError(msg) {
-  document.getElementById('login-error').textContent = msg;
+async function checkSession() {
+  if (!token) return false;
+  try {
+    const r = await fetch(`${API}/auth/me`, {headers: {'Authorization': `Bearer ${token}`}});
+    if (!r.ok) { token = ''; localStorage.removeItem('gw_token'); return false; }
+    currentUser = await r.json();
+    return true;
+  } catch(e) { return false; }
 }
-function hideLogin() {
-  document.getElementById('login-overlay').style.display = 'none';
-  isAuthenticated = true;
-  document.getElementById('conn-status').textContent = 'Conectado';
-  document.getElementById('conn-status').className = 'pill pill-blue';
+
+async function doLogout() {
+  await fetch(`${API}/auth/logout`, {method:'POST', headers:{'Authorization':`Bearer ${token}`}}).catch(()=>{});
+  token = ''; localStorage.removeItem('gw_token'); currentUser = null;
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-page').style.display = 'flex';
+  document.getElementById('login-pass').value = '';
+}
+
+function showApp() {
+  document.getElementById('login-page').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('user-name').textContent = currentUser.name || currentUser.username;
+  if (currentUser.role === 'admin') {
+    document.getElementById('btn-admin').style.display = 'inline-block';
+  }
+  startPolling();
 }
 
 // ── Polling ───────────────────────────────────────────────────────────────────
-function startPolling() {
-  fetchData();
-  setInterval(fetchData, 15000);
-  setInterval(fetchAlerts, 10000);
-}
+function authHeaders() { return {'Authorization': `Bearer ${token}`, 'Content-Type':'application/json'}; }
 
-async function fetchData() {
+function startPolling() { fetchAll(); setInterval(fetchAll, 15000); }
+
+async function fetchAll() {
   try {
-    const [gwR, stR] = await Promise.all([
-      fetch(`${API}/gateways`),
-      fetch(`${API}/status`),
+    const [gR, aR] = await Promise.all([
+      fetch(`${API}/gateways`, {headers: authHeaders()}),
+      fetch(`${API}/alerts`,   {headers: authHeaders()})
     ]);
-    const gwData = await gwR.json();
-    const stData = await stR.json();
-
-    renderGateways(gwData.gateways || []);
-    renderStats(stData);
-    if (gwData.last_poll) {
-      document.getElementById('last-poll').textContent =
-        'Actualizado: ' + new Date(gwData.last_poll).toLocaleTimeString('es-MX');
+    if (gR.status === 401) { doLogout(); return; }
+    const gData = await gR.json();
+    const aData = await aR.json();
+    renderGateways(gData.gateways || []);
+    renderAlerts(aData.alerts || []);
+    checkNewAlerts(aData.alerts || []);
+    if (gData.last_poll) {
+      document.getElementById('last-poll').textContent = 'Actualizado: ' + new Date(gData.last_poll).toLocaleTimeString('es-MX');
     }
-    if (stData.error) {
-      document.getElementById('conn-status').textContent = 'Error';
-      document.getElementById('conn-status').className = 'pill pill-red';
-    } else {
-      document.getElementById('conn-status').textContent = 'Conectado';
-      document.getElementById('conn-status').className = 'pill pill-green';
-    }
-  } catch(e) {
-    console.error('Fetch error:', e);
-  }
+    const total = (gData.gateways||[]).length;
+    const online  = (gData.gateways||[]).filter(g=>g.state==='ONLINE').length;
+    const offline = (gData.gateways||[]).filter(g=>g.state==='OFFLINE').length;
+    const never   = (gData.gateways||[]).filter(g=>g.state==='NEVER_SEEN').length;
+    document.getElementById('s-total').textContent  = total;
+    document.getElementById('s-online').textContent = online;
+    document.getElementById('s-offline').textContent= offline;
+    document.getElementById('s-never').textContent  = never;
+    document.getElementById('gw-count-pill').textContent = total;
+    document.getElementById('gw-count-pill').className = 'pill ' + (offline>0?'pill-red':'pill-green');
+    const pill = document.getElementById('conn-pill');
+    if (gData.error) { pill.textContent='Error'; pill.className='pill pill-red'; }
+    else { pill.textContent='Conectado'; pill.className='pill pill-green'; }
+  } catch(e) { console.error(e); }
 }
 
-async function fetchAlerts() {
-  try {
-    const r = await fetch(`${API}/alerts`);
-    const d = await r.json();
-    const alerts = d.alerts || [];
-    renderAlerts(alerts);
-    // Show toasts for new alerts
-    if (alerts.length > knownAlertCount) {
-      const newAlerts = alerts.slice(0, alerts.length - knownAlertCount);
-      newAlerts.forEach(a => showToast(a));
-    }
-    knownAlertCount = alerts.length;
-  } catch(e) {}
-}
-
-async function clearAlerts() {
-  await fetch(`${API}/alerts`, { method: 'DELETE' });
-  document.getElementById('alerts-list').innerHTML = '<div class="no-alerts">Sin alertas</div>';
-  knownAlertCount = 0;
-}
-
-// ── Render ────────────────────────────────────────────────────────────────────
-function renderStats(s) {
-  document.getElementById('stat-total').textContent = s.total || 0;
-  document.getElementById('stat-online').textContent = s.online || 0;
-  document.getElementById('stat-offline').textContent = s.offline || 0;
-  document.getElementById('stat-never').textContent = s.never_seen || 0;
-  document.getElementById('gw-count').textContent = s.total || 0;
-  document.getElementById('gw-count').className = 'pill ' + (s.offline > 0 ? 'pill-red' : 'pill-green');
-}
-
+// ── Render gateways ───────────────────────────────────────────────────────────
 function renderGateways(gws) {
   const list = document.getElementById('gw-list');
   list.innerHTML = '';
-
-  if (!gws.length) {
-    list.innerHTML = '<div class="no-alerts">Sin gateways. Verifica la autenticación.</div>';
-    return;
-  }
-
-  // Sort: OFFLINE first, then ONLINE, then NEVER_SEEN
-  gws.sort((a, b) => {
-    const order = { OFFLINE: 0, ONLINE: 1, NEVER_SEEN: 2, UNKNOWN: 3 };
-    return (order[a.state] ?? 9) - (order[b.state] ?? 9);
-  });
-
+  if (!gws.length) { list.innerHTML = '<div class="no-alerts">Sin gateways</div>'; return; }
+  gws.sort((a,b)=>({'OFFLINE':0,'ONLINE':1,'NEVER_SEEN':2}[a.state]??9)-({'OFFLINE':0,'ONLINE':1,'NEVER_SEEN':2}[b.state]??9));
   gws.forEach(gw => {
-    const dotClass = gw.state === 'ONLINE' ? 'dot-online' : gw.state === 'OFFLINE' ? 'dot-offline' : 'dot-never';
-    const badgeClass = gw.state === 'ONLINE' ? 'badge-online' : gw.state === 'OFFLINE' ? 'badge-offline' : 'badge-never';
-    const stateLabel = gw.state === 'ONLINE' ? 'En línea' : gw.state === 'OFFLINE' ? 'Offline' : 'Sin datos';
-    const timeStr = gw.last_seen_at ? 'Visto: ' + new Date(gw.last_seen_at).toLocaleString('es-MX') : 'Nunca visto';
-
-    const item = document.createElement('div');
-    item.className = 'gw-item' + (selectedGw === gw.gateway_id ? ' selected' : '');
-    item.innerHTML = `
-      <div class="gw-dot ${dotClass}"></div>
+    const dc = gw.state==='ONLINE'?'dot-online':gw.state==='OFFLINE'?'dot-offline':'dot-never';
+    const bc = gw.state==='ONLINE'?'badge-online':gw.state==='OFFLINE'?'badge-offline':'badge-never';
+    const bl = gw.state==='ONLINE'?'En línea':gw.state==='OFFLINE'?'Offline':'Sin datos';
+    const ts = gw.last_seen_at ? 'Visto: '+new Date(gw.last_seen_at).toLocaleString('es-MX') : 'Nunca visto';
+    const el = document.createElement('div');
+    el.className = 'gw-item'+(selectedGw===gw.gateway_id?' selected':'');
+    el.innerHTML = `<div class="gw-dot ${dc}"></div>
       <div class="gw-info">
-        <div class="gw-name">${escHtml(gw.name)}</div>
-        <div class="gw-id">${escHtml(gw.gateway_id)}</div>
-        <div class="gw-time">${timeStr}</div>
+        <div class="gw-name">${esc(gw.name)}</div>
+        <div class="gw-id">${esc(gw.gateway_id)}</div>
+        <div class="gw-time">${ts}</div>
       </div>
-      <span class="gw-badge ${badgeClass}">${stateLabel}</span>
-    `;
-    item.onclick = () => focusGateway(gw);
-    list.appendChild(item);
-
+      <span class="gw-badge ${bc}">${bl}</span>`;
+    el.onclick = () => focusGw(gw, el);
+    list.appendChild(el);
     updateMarker(gw);
   });
 }
 
 function updateMarker(gw) {
-  const lat = parseFloat(gw.latitude) || 0;
-  const lng = parseFloat(gw.longitude) || 0;
-
-  if (lat === 0 && lng === 0) {
-    // No location — use a small fixed marker off-screen or skip
-    return;
-  }
-
-  const color = gw.state === 'ONLINE' ? '#56d364' : gw.state === 'OFFLINE' ? '#f85149' : '#6e7681';
-  const icon = L.divIcon({
-    className: '',
-    html: `<div style="
-      width:14px;height:14px;border-radius:50%;
-      background:${color};border:2px solid #fff;
-      box-shadow:0 0 8px ${color}88;
-    "></div>`,
-    iconSize: [14, 14],
-    iconAnchor: [7, 7],
-  });
-
-  const popupHtml = `
-    <div class="gw-popup-name">${escHtml(gw.name)}</div>
-    <div class="gw-popup-id">${escHtml(gw.gateway_id)}</div>
-    <div class="gw-popup-state" style="color:${color}">● ${gw.state === 'ONLINE' ? 'En línea' : gw.state === 'OFFLINE' ? 'Offline' : 'Sin datos'}</div>
-    <div style="font-size:0.75rem;color:#8b949e;margin-top:4px;">
-      ${lat.toFixed(5)}, ${lng.toFixed(5)}
-    </div>
-  `;
-
-  if (markers[gw.gateway_id]) {
-    markers[gw.gateway_id].setLatLng([lat, lng]).setIcon(icon).setPopupContent(popupHtml);
-  } else {
-    markers[gw.gateway_id] = L.marker([lat, lng], { icon })
-      .addTo(map)
-      .bindPopup(popupHtml);
-  }
+  const lat = parseFloat(gw.latitude)||0, lng = parseFloat(gw.longitude)||0;
+  if (!lat && !lng) return;
+  const color = gw.state==='ONLINE'?'#56d364':gw.state==='OFFLINE'?'#f85149':'#6e7681';
+  const icon = L.divIcon({className:'', html:`<div style="width:13px;height:13px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 0 8px ${color}88"></div>`, iconSize:[13,13], iconAnchor:[6,6]});
+  const popup = `<div style="font-weight:700">${esc(gw.name)}</div>
+    <div style="font-family:monospace;font-size:.75em;color:#8b949e">${esc(gw.gateway_id)}</div>
+    <div style="color:${color};margin-top:4px">● ${gw.state==='ONLINE'?'En línea':gw.state==='OFFLINE'?'Offline':'Sin datos'}</div>
+    <div style="font-size:.73em;color:#8b949e;margin-top:3px">${lat.toFixed(5)}, ${lng.toFixed(5)}</div>`;
+  if (markers[gw.gateway_id]) markers[gw.gateway_id].setLatLng([lat,lng]).setIcon(icon).setPopupContent(popup);
+  else markers[gw.gateway_id] = L.marker([lat,lng],{icon}).addTo(map).bindPopup(popup);
 }
 
-function focusGateway(gw) {
+function focusGw(gw, el) {
   selectedGw = gw.gateway_id;
-  document.querySelectorAll('.gw-item').forEach(el => el.classList.remove('selected'));
-  event.currentTarget.classList.add('selected');
-
-  const lat = parseFloat(gw.latitude) || 0;
-  const lng = parseFloat(gw.longitude) || 0;
-  if (lat !== 0 || lng !== 0) {
-    map.flyTo([lat, lng], 14, { duration: 1 });
-    if (markers[gw.gateway_id]) markers[gw.gateway_id].openPopup();
-  }
+  document.querySelectorAll('.gw-item').forEach(e=>e.classList.remove('selected'));
+  el.classList.add('selected');
+  const lat=parseFloat(gw.latitude)||0, lng=parseFloat(gw.longitude)||0;
+  if (lat||lng) { map.flyTo([lat,lng],14,{duration:1}); markers[gw.gateway_id]?.openPopup(); }
 }
 
+// ── Alerts ────────────────────────────────────────────────────────────────────
 function renderAlerts(alerts) {
   const el = document.getElementById('alerts-list');
-  if (!alerts.length) {
-    el.innerHTML = '<div class="no-alerts">Sin alertas recientes</div>';
-    return;
-  }
-  el.innerHTML = alerts.map(a => `
-    <div class="alert-item ${a.type === 'OFFLINE' ? 'alert-offline' : 'alert-online'}">
-      <div>${a.type === 'OFFLINE' ? '🔴' : '🟢'} ${escHtml(a.message)}</div>
+  if (!alerts.length) { el.innerHTML='<div class="no-alerts">Sin alertas recientes</div>'; return; }
+  el.innerHTML = alerts.map(a=>`
+    <div class="alert-item ${a.type==='OFFLINE'?'alert-offline':'alert-online'}">
+      <div>${a.type==='OFFLINE'?'🔴':'🟢'} ${esc(a.message)}</div>
       <div class="al-time">${new Date(a.time).toLocaleString('es-MX')}</div>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
-function showToast(alert) {
-  const container = document.getElementById('toast-container');
-  const toast = document.createElement('div');
-  const isOff = alert.type === 'OFFLINE';
-  toast.className = `toast ${isOff ? 'toast-offline' : 'toast-online'}`;
-  toast.innerHTML = `
-    <span class="toast-icon">${isOff ? '🔴' : '🟢'}</span>
-    <div>
-      <div style="font-weight:600">${isOff ? 'Gateway Desconectado' : 'Gateway Reconectado'}</div>
-      <div style="color:#8b949e;font-size:0.8rem;margin-top:2px">${escHtml(alert.name)}</div>
-    </div>
-    <span class="toast-close" onclick="this.parentElement.remove()">✕</span>
-  `;
-  container.appendChild(toast);
-  // Also trigger browser notification if permission granted
-  sendBrowserNotif(alert);
-  setTimeout(() => toast.remove(), 8000);
-}
-
-function sendBrowserNotif(alert) {
-  if (Notification.permission === 'granted') {
-    new Notification(
-      alert.type === 'OFFLINE' ? '🔴 Gateway Desconectado' : '🟢 Gateway Reconectado',
-      { body: alert.message, icon: '/icon.png' }
-    );
+function checkNewAlerts(alerts) {
+  if (alerts.length > knownAlerts) {
+    alerts.slice(0, alerts.length - knownAlerts).forEach(showToast);
   }
+  knownAlerts = alerts.length;
 }
 
-// Request notification permission on load
-if ('Notification' in window && Notification.permission === 'default') {
-  Notification.requestPermission();
+async function clearAlerts() {
+  await fetch(`${API}/alerts`,{method:'DELETE',headers:authHeaders()});
+  document.getElementById('alerts-list').innerHTML='<div class="no-alerts">Sin alertas recientes</div>';
+  knownAlerts = 0;
 }
 
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function showToast(a) {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = `toast ${a.type==='OFFLINE'?'toast-offline':'toast-online'}`;
+  t.innerHTML = `<span>${a.type==='OFFLINE'?'🔴':'🟢'}</span>
+    <div><div style="font-weight:600">${a.type==='OFFLINE'?'Gateway Desconectado':'Gateway Reconectado'}</div>
+    <div style="color:#8b949e;font-size:.78rem;margin-top:2px">${esc(a.name)}</div></div>
+    <span class="toast-close" onclick="this.parentElement.remove()">✕</span>`;
+  c.appendChild(t);
+  if (Notification.permission==='granted')
+    new Notification(a.type==='OFFLINE'?'🔴 Gateway Desconectado':'🟢 Gateway Reconectado',{body:a.message});
+  setTimeout(()=>t.remove(), 8000);
+}
+
+if ('Notification' in window && Notification.permission==='default') Notification.requestPermission();
+
+// ── Admin panel ───────────────────────────────────────────────────────────────
+async function openAdmin() {
+  await loadUsers();
+  openModal('admin-modal');
+}
+
+async function loadUsers() {
+  const r = await fetch(`${API}/admin/users`,{headers:authHeaders()});
+  const users = await r.json();
+  const wrap = document.getElementById('user-table-wrap');
+  if (!users.length) { wrap.innerHTML='<div class="no-alerts">Sin usuarios</div>'; return; }
+  wrap.innerHTML = `<table class="user-table">
+    <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th></th></tr></thead>
+    <tbody>${users.map(u=>`
+      <tr>
+        <td style="font-family:monospace">${esc(u.username)}</td>
+        <td>${esc(u.name)}</td>
+        <td><span class="role-badge role-${u.role}">${u.role==='admin'?'Admin':'Viewer'}</span></td>
+        <td>${u.username!==currentUser.username?`<button class="btn-danger" onclick="deleteUser('${esc(u.username)}')">Eliminar</button>`:'<span style="color:#6e7681;font-size:.75em">Tú</span>'}</td>
+      </tr>`).join('')}
+    </tbody></table>`;
+}
+
+async function createUser() {
+  const body = {
+    username: document.getElementById('nu-user').value.trim(),
+    name:     document.getElementById('nu-name').value.trim(),
+    password: document.getElementById('nu-pass').value,
+    role:     document.getElementById('nu-role').value,
+  };
+  if (!body.username || !body.password) { setStatus('admin-status','Completa usuario y contraseña',false); return; }
+  const r = await fetch(`${API}/admin/users`,{method:'POST',headers:authHeaders(),body:JSON.stringify(body)});
+  const d = await r.json();
+  if (r.ok) {
+    setStatus('admin-status',`✓ Usuario '${body.username}' creado`,true);
+    document.getElementById('nu-user').value='';
+    document.getElementById('nu-name').value='';
+    document.getElementById('nu-pass').value='';
+    await loadUsers();
+  } else setStatus('admin-status', d.detail||'Error',false);
+}
+
+async function deleteUser(username) {
+  if (!confirm(`¿Eliminar usuario "${username}"?`)) return;
+  const r = await fetch(`${API}/admin/users/${username}`,{method:'DELETE',headers:authHeaders()});
+  if (r.ok) { setStatus('admin-status',`Usuario eliminado`,true); await loadUsers(); }
 }
 
 // ── Email modal ───────────────────────────────────────────────────────────────
-async function openEmailModal() {
+async function openEmail() {
   try {
-    const r = await fetch(`${API}/email/config`);
+    const r = await fetch(`${API}/email/config`,{headers:authHeaders()});
     const d = await r.json();
-    if (d.smtp_user) document.getElementById('smtp-user').value = d.smtp_user;
-    if (d.email_from) document.getElementById('email-from').value = d.email_from;
-    if (d.email_to) document.getElementById('email-to').value = d.email_to;
-    if (d.smtp_host) document.getElementById('smtp-host').value = d.smtp_host;
-    if (d.smtp_port) document.getElementById('smtp-port').value = d.smtp_port;
-  } catch(e) {}
-  document.getElementById('email-status').textContent = '';
-  document.getElementById('email-modal').classList.add('open');
+    if(d.smtp_user)  document.getElementById('smtp-user').value  = d.smtp_user;
+    if(d.email_from) document.getElementById('email-from').value = d.email_from;
+    if(d.email_to)   document.getElementById('email-to').value   = d.email_to;
+    if(d.smtp_host)  document.getElementById('smtp-host').value  = d.smtp_host;
+    if(d.smtp_port)  document.getElementById('smtp-port').value  = d.smtp_port;
+  } catch(e){}
+  document.getElementById('email-status').textContent='';
+  openModal('email-modal');
 }
 
-function closeEmailModal() {
-  document.getElementById('email-modal').classList.remove('open');
-}
-
-async function saveEmailConfig() {
+async function saveEmail() {
   const body = {
     smtp_host: document.getElementById('smtp-host').value.trim(),
-    smtp_port: parseInt(document.getElementById('smtp-port').value) || 587,
+    smtp_port: parseInt(document.getElementById('smtp-port').value)||587,
     smtp_user: document.getElementById('smtp-user').value.trim(),
     smtp_password: document.getElementById('smtp-pass').value,
     email_from: document.getElementById('email-from').value.trim(),
-    email_to: document.getElementById('email-to').value.trim(),
+    email_to:   document.getElementById('email-to').value.trim(),
   };
-  if (!body.smtp_user || !body.smtp_password || !body.email_to) {
-    setEmailStatus('Completa todos los campos requeridos', false); return;
-  }
-  try {
-    const r = await fetch(`${API}/email/config`, {
-      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
-    });
-    const d = await r.json();
-    if (d.ok) { setEmailStatus('✓ Configuración guardada', true); setTimeout(closeEmailModal, 1200); }
-    else setEmailStatus(d.detail || 'Error al guardar', false);
-  } catch(e) { setEmailStatus('No se pudo conectar con el backend', false); }
+  if (!body.smtp_user||!body.smtp_password||!body.email_to){setStatus('email-status','Completa los campos',false);return;}
+  const r=await fetch(`${API}/email/config`,{method:'POST',headers:authHeaders(),body:JSON.stringify(body)});
+  const d=await r.json();
+  if(d.ok){setStatus('email-status','✓ Guardado',true);setTimeout(()=>closeModal('email-modal'),1200);}
+  else setStatus('email-status',d.detail||'Error',false);
 }
 
 async function testEmail() {
-  setEmailStatus('Enviando correo de prueba...', true);
-  // Save first, then test
-  await saveEmailConfig();
-  try {
-    const r = await fetch(`${API}/email/test`, { method: 'POST' });
-    const d = await r.json();
-    if (r.ok) setEmailStatus(`✓ ${d.message}`, true);
-    else setEmailStatus(d.detail || 'Error al enviar', false);
-  } catch(e) { setEmailStatus('Error: ' + e.message, false); }
+  await saveEmail();
+  setStatus('email-status','Enviando prueba...',true);
+  const r=await fetch(`${API}/email/test`,{method:'POST',headers:authHeaders()});
+  const d=await r.json();
+  if(r.ok) setStatus('email-status','✓ '+d.message,true);
+  else setStatus('email-status',d.detail||'Error',false);
 }
 
-function setEmailStatus(msg, ok) {
-  const el = document.getElementById('email-status');
-  el.textContent = msg;
-  el.className = ok ? 'email-ok' : 'email-err';
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function setStatus(id, msg, ok) { const el=document.getElementById(id); el.textContent=msg; el.className='modal-status '+(ok?'ok':'err'); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-// Close modal clicking outside
-document.getElementById('email-modal').addEventListener('click', e => {
-  if (e.target === document.getElementById('email-modal')) closeEmailModal();
+document.querySelectorAll('.modal-overlay').forEach(m=>{
+  m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('open'); });
+});
+document.addEventListener('keydown', e=>{
+  if (e.key==='Enter' && document.getElementById('login-page').style.display!=='none') doLogin();
 });
 
-// ── Key press for login ───────────────────────────────────────────────────────
-// Key press for login
-document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && document.getElementById('login-overlay').style.display !== 'none') {
-    const active = document.querySelector('.tab-pane.active');
-    if (active.id === 'tab-apikey') authWithApiKey();
-    else authWithLogin();
-  }
-});
+// ── Boot ──────────────────────────────────────────────────────────────────────
+(async () => {
+  const ok = await checkSession();
+  if (ok) showApp();
+  // else login page is already visible
+})();
 </script>
 </body>
 </html>
