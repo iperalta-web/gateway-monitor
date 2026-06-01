@@ -106,7 +106,8 @@ header {
 .btn-clear:hover { color: #f85149; }
 
 /* ── Map ── */
-#map { height: 100%; width: 100%; }
+main { overflow: hidden; position: relative; }
+#map { position: absolute; inset: 0; height: 100%; width: 100%; }
 
 /* ── Modals ── */
 .modal-overlay {
@@ -329,6 +330,8 @@ function showApp() {
   if (currentUser.role === 'admin') {
     document.getElementById('btn-admin').style.display = 'inline-block';
   }
+  // Force Leaflet to recalculate map size after container becomes visible
+  setTimeout(() => map.invalidateSize(), 100);
   startPolling();
 }
 
