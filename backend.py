@@ -47,7 +47,7 @@ SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 # ─── User store (in-memory, seeded from env) ──────────────────────────────────
 # users = { username: { "password_hash": str, "role": "admin"|"viewer", "name": str } }
 ADMIN_USER     = os.environ.get("ADMIN_USER", "admin")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "IotNet2024!")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
 def _hash(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
