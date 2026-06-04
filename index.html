@@ -95,6 +95,8 @@ header {
 .badge-online  { background:#0d1f0d; color:#56d364; border:1px solid #238636; }
 .badge-offline { background:#1f0d0d; color:#f85149; border:1px solid #da3633; }
 .badge-never   { background:#1c2128; color:#6e7681; border:1px solid #30363d; }
+.gw-hidden .gw-name, .gw-hidden .gw-id, .gw-hidden .gw-time { opacity: 0.38; }
+.gw-hidden .gw-dot { opacity: 0.25; }
 
 /* ── Alerts ── */
 .alerts-section { border-top: 1px solid #30363d; max-height: 190px; overflow-y: auto; flex-shrink: 0; }
@@ -230,6 +232,13 @@ main { overflow: hidden; position: relative; }
           oninput="updateCoverageRadius(this.value)"/>
         <span id="km-label" style="min-width:32px;color:#58a6ff;font-weight:600">5 km</span>
       </div>
+      <div style="display:flex;align-items:center;gap:5px;font-size:0.78rem;color:#8b949e" title="Intensidad de cobertura">
+        🎨
+        <input type="range" id="range-opacity" min="1" max="10" value="5"
+          style="width:60px;accent-color:#a371f7;cursor:pointer"
+          oninput="updateCoverageOpacity(this.value)"/>
+        <span id="opacity-label" style="min-width:26px;color:#a371f7;font-weight:600">50%</span>
+      </div>
       <button class="btn-sm" id="btn-admin" onclick="openAdmin()" style="display:none">👥 Usuarios</button>
       <button class="btn-sm" onclick="openEmail()">📧 Email</button>
       <button class="btn-sm" onclick="doLogout()">Salir</button>
@@ -338,8 +347,10 @@ let currentUser = null;
 let selectedGw = null;
 let markers = {};
 let coveragePolygons = {};   // { gw_id: [ L.polygon, ... ] }
+let hiddenGateways = new Set(JSON.parse(localStorage.getItem('gw_hidden') || '[]'));
 let knownAlerts = 0;
-let coverageRadius = parseInt(localStorage.getItem('gw_coverage_km') || '5') * 1000;
+let coverageRadius  = parseInt(localStorage.getItem('gw_coverage_km')      || '5') * 1000;
+let coverageOpacity = parseFloat(localStorage.getItem('gw_coverage_opacity') || '0.5');
 
 // ── Coverage polygon generator ───────────────────────────────────────────────
 // Seeded pseudo-random (so same gateway always gets same shape)
@@ -380,13 +391,13 @@ function buildCoverageZones(gw, radius) {
   for (let c of gw.gateway_id) seedVal = (seedVal * 31 + c.charCodeAt(0)) & 0x7fffffff;
   const rng = seededRng(seedVal);
 
-  // Zone definitions: [inner%, outer%, color, fillOpacity, weight, opacity, dashArray]
-  // 4 signal quality zones — colors match real LoRaWAN coverage maps
+  // Zone definitions — fillOpacity scaled by global coverageOpacity multiplier
+  const m = coverageOpacity; // multiplier 0.1 – 1.0
   const zones = [
-    { pct: 0.25, color: '#00cc44', fillOpacity: isOffline?0.04:0.18, weight:0,   opacity:0, dash:null },  // Excellent (green)
-    { pct: 0.50, color: '#2255ff', fillOpacity: isOffline?0.03:0.14, weight:0,   opacity:0, dash:null },  // Good (blue)
-    { pct: 0.75, color: '#8833dd', fillOpacity: isOffline?0.03:0.10, weight:0,   opacity:0, dash:null },  // Fair (purple)
-    { pct: 1.00, color: '#ee3311', fillOpacity: isOffline?0.02:0.07, weight: isOffline?1:0.5, opacity: isOffline?0.3:0.2, dash: isOffline?'6,4':null }, // Poor (red)
+    { pct: 0.25, color: '#00cc44', fillOpacity: isOffline?0.04*m:0.36*m, weight:0,   opacity:0, dash:null },  // Excellent (green)
+    { pct: 0.50, color: '#2255ff', fillOpacity: isOffline?0.03*m:0.28*m, weight:0,   opacity:0, dash:null },  // Good (blue)
+    { pct: 0.75, color: '#8833dd', fillOpacity: isOffline?0.03*m:0.20*m, weight:0,   opacity:0, dash:null },  // Fair (purple)
+    { pct: 1.00, color: '#ee3311', fillOpacity: isOffline?0.02*m:0.14*m, weight: isOffline?1:0.5, opacity: isOffline?0.3:0.2*m, dash: isOffline?'6,4':null }, // Poor (red)
   ];
 
   const layers = [];
@@ -489,10 +500,13 @@ function showApp() {
   }
   // Force Leaflet to recalculate map size after container becomes visible
   setTimeout(() => map.invalidateSize(), 100);
-  // Init coverage slider
+  // Init coverage sliders
   const savedKm = parseInt(localStorage.getItem('gw_coverage_km') || '5');
   document.getElementById('range-km').value = savedKm;
   document.getElementById('km-label').textContent = savedKm + ' km';
+  const savedOp = Math.round(parseFloat(localStorage.getItem('gw_coverage_opacity') || '0.5') * 10);
+  document.getElementById('range-opacity').value = savedOp;
+  document.getElementById('opacity-label').textContent = (savedOp * 10) + '%';
   startPolling();
 }
 
@@ -544,16 +558,22 @@ function renderGateways(gws) {
     const bc = gw.state==='ONLINE'?'badge-online':gw.state==='OFFLINE'?'badge-offline':'badge-never';
     const bl = gw.state==='ONLINE'?'En línea':gw.state==='OFFLINE'?'Offline':'Sin datos';
     const ts = gw.last_seen_at ? 'Visto: '+new Date(gw.last_seen_at).toLocaleString('es-MX') : 'Nunca visto';
+    const isHidden = hiddenGateways.has(gw.gateway_id);
     const el = document.createElement('div');
-    el.className = 'gw-item'+(selectedGw===gw.gateway_id?' selected':'');
-    el.innerHTML = `<div class="gw-dot ${dc}"></div>
+    el.className = 'gw-item'+(selectedGw===gw.gateway_id?' selected':'')+(isHidden?' gw-hidden':'');
+    el.innerHTML = `
+      <input type="checkbox" class="gw-check" ${isHidden?'':'checked'}
+        title="Mostrar/ocultar en mapa"
+        style="accent-color:#58a6ff;width:15px;height:15px;cursor:pointer;flex-shrink:0;margin-top:3px"
+        onclick="event.stopPropagation();toggleGateway('${esc(gw.gateway_id)}',this.checked);this.closest('.gw-item').classList.toggle('gw-hidden',!this.checked)"/>
+      <div class="gw-dot ${dc}"></div>
       <div class="gw-info">
         <div class="gw-name">${esc(gw.name)}</div>
         <div class="gw-id">${esc(gw.gateway_id)}</div>
         <div class="gw-time">${ts}</div>
       </div>
       <span class="gw-badge ${bc}">${bl}</span>`;
-    el.onclick = () => focusGw(gw, el);
+    el.onclick = (e) => { if(e.target.type==='checkbox') return; focusGw(gw, el); };
     list.appendChild(el);
     updateMarker(gw);
   });
@@ -574,11 +594,16 @@ function updateMarker(gw) {
     <div style="font-size:.75em;color:#8b949e;margin-top:2px">📡 Cobertura aprox. ~${kmLabel} km</div>
     ${gw.last_seen_at?`<div style="font-size:.73em;color:#6e7681;margin-top:3px">Visto: ${new Date(gw.last_seen_at).toLocaleString('es-MX')}</div>`:''}`;
 
+  const isHidden = hiddenGateways.has(gw.gateway_id);
+
   // Marker
   if (markers[gw.gateway_id]) {
     markers[gw.gateway_id].setLatLng([lat,lng]).setIcon(icon).setPopupContent(popup);
+    if (isHidden) markers[gw.gateway_id].remove(); else markers[gw.gateway_id].addTo(map);
   } else {
-    markers[gw.gateway_id] = L.marker([lat,lng],{icon,zIndexOffset:1000}).addTo(map).bindPopup(popup);
+    const m = L.marker([lat,lng],{icon,zIndexOffset:1000}).bindPopup(popup);
+    if (!isHidden) m.addTo(map);
+    markers[gw.gateway_id] = m;
   }
 
   // Coverage zones — remove old layers then rebuild
@@ -586,10 +611,12 @@ function updateMarker(gw) {
     coveragePolygons[gw.gateway_id].forEach(l => l.remove());
     delete coveragePolygons[gw.gateway_id];
   }
-  const layers = buildCoverageZones(gw, coverageRadius);
-  if (layers.length) {
-    layers.forEach(l => l.addTo(map));
-    coveragePolygons[gw.gateway_id] = layers;
+  if (!isHidden) {
+    const layers = buildCoverageZones(gw, coverageRadius);
+    if (layers.length) {
+      layers.forEach(l => l.addTo(map));
+      coveragePolygons[gw.gateway_id] = layers;
+    }
   }
 }
 
@@ -850,19 +877,44 @@ async function testEmail() {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+function redrawAllCoverage() {
+  Object.keys(coveragePolygons).forEach(id => {
+    coveragePolygons[id].forEach(l => l.remove());
+    delete coveragePolygons[id];
+  });
+  const gws = document.getElementById('gw-list').__gws || [];
+  gws.forEach(gw => updateMarker(gw));
+}
+
 function updateCoverageRadius(km) {
   coverageRadius = parseInt(km) * 1000;
   localStorage.setItem('gw_coverage_km', km);
   document.getElementById('km-label').textContent = km + ' km';
   document.getElementById('range-km').value = km;
-  // Remove all existing coverage polygon layers
-  Object.keys(coveragePolygons).forEach(id => {
-    coveragePolygons[id].forEach(l => l.remove());
-    delete coveragePolygons[id];
-  });
-  // Redraw with new radius
-  const gws = document.getElementById('gw-list').__gws || [];
-  gws.forEach(gw => updateMarker(gw));
+  redrawAllCoverage();
+}
+
+function updateCoverageOpacity(val) {
+  coverageOpacity = parseInt(val) / 10;
+  localStorage.setItem('gw_coverage_opacity', coverageOpacity);
+  document.getElementById('opacity-label').textContent = (parseInt(val)*10) + '%';
+  redrawAllCoverage();
+}
+
+function toggleGateway(gwId, checked) {
+  if (checked) {
+    hiddenGateways.delete(gwId);
+  } else {
+    hiddenGateways.add(gwId);
+  }
+  localStorage.setItem('gw_hidden', JSON.stringify([...hiddenGateways]));
+  // Show/hide marker and coverage
+  if (markers[gwId]) {
+    if (checked) markers[gwId].addTo(map); else markers[gwId].remove();
+  }
+  if (coveragePolygons[gwId]) {
+    coveragePolygons[gwId].forEach(l => { if(checked) l.addTo(map); else l.remove(); });
+  }
 }
 
 function openModal(id)  { document.getElementById(id).classList.add('open'); }
