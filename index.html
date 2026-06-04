@@ -337,15 +337,110 @@ let token = localStorage.getItem('gw_token') || '';
 let currentUser = null;
 let selectedGw = null;
 let markers = {};
-let coverageCircles = {};
+let coveragePolygons = {};   // { gw_id: [ L.polygon, ... ] }
 let knownAlerts = 0;
-let coverageRadius = parseInt(localStorage.getItem('gw_coverage_km') || '5') * 1000; // metros
+let coverageRadius = parseInt(localStorage.getItem('gw_coverage_km') || '5') * 1000;
+
+// ── Coverage polygon generator ───────────────────────────────────────────────
+// Seeded pseudo-random (so same gateway always gets same shape)
+function seededRng(seed) {
+  let s = seed;
+  return () => { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 4294967296; };
+}
+
+function generateCoverageRing(lat, lng, innerR, outerR, segments, rng, heightFactor) {
+  // heightFactor: terrain effect — more irregular in hills
+  const points = [];
+  for (let i = 0; i < segments; i++) {
+    const angle = (2 * Math.PI * i) / segments;
+    // Multi-octave noise for organic shape
+    const noise1 = rng() - 0.5;
+    const noise2 = (rng() - 0.5) * 0.5;
+    const noise3 = (rng() - 0.5) * 0.25;
+    const totalNoise = (noise1 + noise2 + noise3) * heightFactor;
+    const r = outerR * (1 + totalNoise);
+    // Convert meters to degrees (approx)
+    const dLat = (r * Math.cos(angle)) / 111320;
+    const dLng = (r * Math.sin(angle)) / (111320 * Math.cos(lat * Math.PI / 180));
+    points.push([lat + dLat, lng + dLng]);
+  }
+  points.push(points[0]); // close polygon
+  return points;
+}
+
+function buildCoverageZones(gw, radius) {
+  const lat = parseFloat(gw.latitude), lng = parseFloat(gw.longitude);
+  if (!lat && !lng) return [];
+
+  const isOnline  = gw.state === 'ONLINE';
+  const isOffline = gw.state === 'OFFLINE';
+
+  // Seed based on gateway_id so shape is stable
+  let seedVal = 0;
+  for (let c of gw.gateway_id) seedVal = (seedVal * 31 + c.charCodeAt(0)) & 0x7fffffff;
+  const rng = seededRng(seedVal);
+
+  // Zone definitions: [inner%, outer%, color, fillOpacity, weight, opacity, dashArray]
+  // 4 signal quality zones — colors match real LoRaWAN coverage maps
+  const zones = [
+    { pct: 0.25, color: '#00cc44', fillOpacity: isOffline?0.04:0.18, weight:0,   opacity:0, dash:null },  // Excellent (green)
+    { pct: 0.50, color: '#2255ff', fillOpacity: isOffline?0.03:0.14, weight:0,   opacity:0, dash:null },  // Good (blue)
+    { pct: 0.75, color: '#8833dd', fillOpacity: isOffline?0.03:0.10, weight:0,   opacity:0, dash:null },  // Fair (purple)
+    { pct: 1.00, color: '#ee3311', fillOpacity: isOffline?0.02:0.07, weight: isOffline?1:0.5, opacity: isOffline?0.3:0.2, dash: isOffline?'6,4':null }, // Poor (red)
+  ];
+
+  const layers = [];
+  const segs = 64;
+  const irregularity = 0.45; // high = very irregular terrain
+
+  zones.forEach((z, idx) => {
+    const outerR = radius * z.pct;
+    const outer  = generateCoverageRing(lat, lng, 0, outerR, segs + idx*4, rng, irregularity);
+
+    const poly = L.polygon(outer, {
+      color:       z.color,
+      fillColor:   z.color,
+      fillOpacity: z.fillOpacity,
+      weight:      z.weight,
+      opacity:     z.opacity,
+      dashArray:   z.dash,
+      interactive: false,
+    });
+    layers.push(poly);
+  });
+
+  // Border ring for online gateways
+  if (isOnline) {
+    const rng2 = seededRng(seedVal + 1);
+    const border = generateCoverageRing(lat, lng, 0, radius, segs, rng2, irregularity * 0.6);
+    layers.push(L.polygon(border, {
+      color: '#ee3311', fillOpacity: 0, weight: 1.2, opacity: 0.35,
+      dashArray: null, interactive: false,
+    }));
+  }
+
+  return layers;
+}
 
 // ── Map init ──────────────────────────────────────────────────────────────────
 const map = L.map('map').setView([20.5, -100], 5);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© <a href="https://osm.org/copyright">OpenStreetMap</a>', maxZoom: 19
 }).addTo(map);
+
+// Coverage legend
+const legend = L.control({position: 'bottomright'});
+legend.onAdd = function() {
+  const div = L.DomUtil.create('div');
+  div.style.cssText = 'background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px 13px;font-size:.73rem;color:#e1e4e8;line-height:1.8;box-shadow:0 2px 10px rgba(0,0,0,.5)';
+  div.innerHTML = `<div style="font-weight:700;color:#8b949e;margin-bottom:4px;font-size:.68rem;text-transform:uppercase;letter-spacing:.5px">📡 Cobertura LoRaWAN</div>
+    <div><span style="display:inline-block;width:12px;height:12px;background:#00cc44;border-radius:2px;margin-right:6px;opacity:.85"></span>Excelente</div>
+    <div><span style="display:inline-block;width:12px;height:12px;background:#2255ff;border-radius:2px;margin-right:6px;opacity:.85"></span>Buena</div>
+    <div><span style="display:inline-block;width:12px;height:12px;background:#8833dd;border-radius:2px;margin-right:6px;opacity:.85"></span>Regular</div>
+    <div><span style="display:inline-block;width:12px;height:12px;background:#ee3311;border-radius:2px;margin-right:6px;opacity:.85"></span>Límite</div>`;
+  return div;
+};
+legend.addTo(map);
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 async function doLogin() {
@@ -486,24 +581,15 @@ function updateMarker(gw) {
     markers[gw.gateway_id] = L.marker([lat,lng],{icon,zIndexOffset:1000}).addTo(map).bindPopup(popup);
   }
 
-  // Coverage circle
-  const circleOptions = {
-    radius: coverageRadius,
-    color: fillColor,
-    fillColor: fillColor,
-    fillOpacity: gw.state==='ONLINE' ? 0.08 : 0.04,
-    weight: gw.state==='ONLINE' ? 1.5 : 1,
-    opacity: gw.state==='ONLINE' ? 0.5 : 0.3,
-    dashArray: gw.state==='OFFLINE' ? '6,4' : null,
-  };
-  if (coverageCircles[gw.gateway_id]) {
-    coverageCircles[gw.gateway_id].setLatLng([lat,lng]).setStyle(circleOptions).setRadius(coverageRadius);
-  } else {
-    coverageCircles[gw.gateway_id] = L.circle([lat,lng], circleOptions).addTo(map);
-    coverageCircles[gw.gateway_id].bindTooltip(
-      `📡 ${esc(gw.name)} — ~${kmLabel} km`,
-      {permanent:false, direction:'top', className:''}
-    );
+  // Coverage zones — remove old layers then rebuild
+  if (coveragePolygons[gw.gateway_id]) {
+    coveragePolygons[gw.gateway_id].forEach(l => l.remove());
+    delete coveragePolygons[gw.gateway_id];
+  }
+  const layers = buildCoverageZones(gw, coverageRadius);
+  if (layers.length) {
+    layers.forEach(l => l.addTo(map));
+    coveragePolygons[gw.gateway_id] = layers;
   }
 }
 
@@ -769,9 +855,12 @@ function updateCoverageRadius(km) {
   localStorage.setItem('gw_coverage_km', km);
   document.getElementById('km-label').textContent = km + ' km';
   document.getElementById('range-km').value = km;
-  // Redraw all circles
-  Object.keys(coverageCircles).forEach(id => { coverageCircles[id].remove(); delete coverageCircles[id]; });
-  // Re-trigger marker update with latest gateways
+  // Remove all existing coverage polygon layers
+  Object.keys(coveragePolygons).forEach(id => {
+    coveragePolygons[id].forEach(l => l.remove());
+    delete coveragePolygons[id];
+  });
+  // Redraw with new radius
   const gws = document.getElementById('gw-list').__gws || [];
   gws.forEach(gw => updateMarker(gw));
 }
