@@ -169,6 +169,160 @@ def _grpc_post(path: str, proto_body: bytes, token: str) -> bytes:
     length = struct.unpack(">I", r.content[1:5])[0]
     return r.content[5:5 + length]
 
+# ─── Helpers extra: timestamp & float packing ────────────────────────────────
+
+def _msgf(f: int, b: bytes) -> bytes:
+    return _vi_enc((f << 3) | 2) + _vi_enc(len(b)) + b
+
+def _ts_bytes(unix_ts: int) -> bytes:
+    return _intf(1, unix_ts)
+
+def _decode_floats(data: bytes) -> list:
+    """Decode packed repeated float32."""
+    return [struct.unpack("<f", data[i:i+4])[0] for i in range(0, len(data) - 3, 4)]
+
+# ─── ChirpStack: gateway metrics ─────────────────────────────────────────────
+
+def get_gateway_metrics(gateway_id: str, days: int = 7) -> dict:
+    """Returns rx/tx counts per day for the last N days."""
+    now   = int(datetime.now(timezone.utc).timestamp())
+    start = now - days * 86400
+    body  = (_sf(1, gateway_id) +
+             _msgf(2, _ts_bytes(start)) +
+             _msgf(3, _ts_bytes(now)) +
+             _intf(4, 1))   # aggregation DAY=1
+    try:
+        payload = _grpc_post("/api.GatewayService/GetMetrics", body, CHIRPSTACK_KEY)
+    except Exception as e:
+        return {"error": str(e), "rx_per_day": [], "tx_per_day": [], "timestamps": []}
+
+    resp = decode_proto(payload)
+
+    def _parse_metric(raw) -> dict:
+        if not raw: return {"name": "", "datasets": {}, "timestamps": []}
+        if isinstance(raw, str): raw = raw.encode("latin-1")
+        m = decode_proto(raw)
+        name = m.get(1, "")
+        # timestamps at field 2 (repeated Timestamp bytes)
+        ts_raw = m.get(2, [])
+        if not isinstance(ts_raw, list): ts_raw = [ts_raw]
+        timestamps = []
+        for t in ts_raw:
+            if isinstance(t, str): t = t.encode("latin-1")
+            if isinstance(t, bytes):
+                tfields = decode_proto(t)
+                sec = tfields.get(1, 0)
+                timestamps.append(datetime.fromtimestamp(sec, tz=timezone.utc).strftime("%d/%m"))
+        # datasets at field 3 (repeated MetricDataset bytes)
+        ds_raw = m.get(3, [])
+        if not isinstance(ds_raw, list): ds_raw = [ds_raw]
+        datasets = {}
+        for d in ds_raw:
+            if isinstance(d, str): d = d.encode("latin-1")
+            if isinstance(d, bytes):
+                df = decode_proto(d)
+                label = df.get(1, "")
+                data_raw = df.get(2, b"")
+                if isinstance(data_raw, str): data_raw = data_raw.encode("latin-1")
+                if isinstance(data_raw, bytes):
+                    floats = _decode_floats(data_raw)
+                    datasets[label] = [int(v) for v in floats]
+        return {"name": name, "datasets": datasets, "timestamps": timestamps}
+
+    rx = _parse_metric(resp.get(1))
+    tx = _parse_metric(resp.get(2))
+    rx_per_dr = _parse_metric(resp.get(6))
+
+    # Sum all datasets for total per day
+    def _sum_datasets(metric: dict) -> list:
+        if not metric["datasets"]: return []
+        all_vals = list(metric["datasets"].values())
+        if not all_vals: return []
+        length = max(len(v) for v in all_vals)
+        return [int(sum(v[i] for v in all_vals if i < len(v))) for i in range(length)]
+
+    return {
+        "gateway_id": gateway_id,
+        "days": days,
+        "timestamps": rx.get("timestamps", []),
+        "rx_per_day": _sum_datasets(rx),
+        "tx_per_day": _sum_datasets(tx),
+        "rx_per_dr":  rx_per_dr.get("datasets", {}),
+        "total_rx_7d": sum(_sum_datasets(rx)),
+        "total_tx_7d": sum(_sum_datasets(tx)),
+    }
+
+# ─── ChirpStack: all devices ──────────────────────────────────────────────────
+
+def get_all_devices() -> list:
+    """List all devices across all applications in the tenant."""
+    # Step 1: get all applications
+    apps_body = _intf(1, 1000) + _sf(4, TENANT_ID)
+    apps_payload = _grpc_post("/api.ApplicationService/List", apps_body, CHIRPSTACK_KEY)
+    apps_resp = decode_proto(apps_payload)
+    app_items = apps_resp.get(2, [])
+    if not isinstance(app_items, list): app_items = [app_items]
+
+    applications = []
+    for item in app_items:
+        if isinstance(item, str): item = item.encode("latin-1")
+        if isinstance(item, bytes):
+            a = decode_proto(item)
+            app_id   = a.get(1, "")
+            app_name = a.get(4, "")
+            if isinstance(app_id, bytes):
+                try: app_id = app_id.decode("utf-8")
+                except: app_id = ""
+            applications.append({"id": app_id, "name": app_name})
+
+    # Step 2: get devices per application
+    # DeviceListItem: dev_eui=1, created_at=2, updated_at=3, last_seen_at=4, name=5
+    all_devices = []
+    for app in applications:
+        if not app["id"]: continue
+        try:
+            dev_body = _intf(1, 1000) + _sf(4, app["id"])
+            dev_payload = _grpc_post("/api.DeviceService/List", dev_body, CHIRPSTACK_KEY)
+            dev_resp = decode_proto(dev_payload)
+            total = dev_resp.get(1, 0)
+            ditems = dev_resp.get(2, [])
+            if not isinstance(ditems, list): ditems = [ditems]
+            for ditem in ditems:
+                if isinstance(ditem, str): ditem = ditem.encode("latin-1")
+                if isinstance(ditem, bytes):
+                    d = decode_proto(ditem)
+                    dev_eui = d.get(1, "")
+                    name    = d.get(5, dev_eui)
+                    last_seen = _parse_ts_raw(d.get(4))
+                    all_devices.append({
+                        "dev_eui":         dev_eui,
+                        "name":            name,
+                        "application_id":  app["id"],
+                        "application_name":app["name"],
+                        "last_seen_at":    last_seen,
+                        "device_profile_name": d.get(8, ""),
+                    })
+        except Exception as e:
+            log.warning(f"Error getting devices for app {app['id']}: {e}")
+
+    # Sort: most recently seen first
+    def _sort_key(d):
+        ls = d.get("last_seen_at") or ""
+        return ls
+    all_devices.sort(key=_sort_key, reverse=True)
+    return all_devices
+
+def _parse_ts_raw(raw) -> str | None:
+    if not raw: return None
+    try:
+        if isinstance(raw, str): raw = raw.encode("latin-1")
+        if isinstance(raw, bytes):
+            ts = decode_proto(raw)
+            sec = ts.get(1, 0)
+            if sec: return datetime.fromtimestamp(sec, tz=timezone.utc).isoformat()
+    except Exception: pass
+    return None
+
 # ─── Gateway state ────────────────────────────────────────────────────────────
 
 state = {
@@ -468,6 +622,39 @@ def api_test_email(user=Depends(require_admin)):
     try:
         send_email_alert(test_alert)
         return {"ok": True, "message": f"Email enviado a {EMAIL_TO}"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ─── Stats endpoints ─────────────────────────────────────────────────────────
+
+@app.get("/gateways/{gateway_id}/metrics")
+def api_gateway_metrics(gateway_id: str, days: int = 7, user=Depends(require_auth)):
+    return get_gateway_metrics(gateway_id, days)
+
+@app.get("/devices/all")
+def api_all_devices(user=Depends(require_auth)):
+    try:
+        devices = get_all_devices()
+        now = datetime.now(timezone.utc)
+        # Mark active (seen in last 24h)
+        for d in devices:
+            ls = d.get("last_seen_at")
+            if ls:
+                try:
+                    last = datetime.fromisoformat(ls)
+                    diff = (now - last).total_seconds()
+                    d["active_24h"] = diff < 86400
+                    d["active_7d"]  = diff < 7 * 86400
+                except Exception:
+                    d["active_24h"] = False
+                    d["active_7d"]  = False
+            else:
+                d["active_24h"] = False
+                d["active_7d"]  = False
+        total    = len(devices)
+        active24 = sum(1 for d in devices if d["active_24h"])
+        active7d = sum(1 for d in devices if d["active_7d"])
+        return {"total": total, "active_24h": active24, "active_7d": active7d, "devices": devices}
     except Exception as e:
         raise HTTPException(500, str(e))
 

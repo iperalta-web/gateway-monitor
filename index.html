@@ -148,6 +148,46 @@ main { overflow: hidden; position: relative; }
 .toast-close { margin-left:auto; cursor:pointer; color:#6e7681; padding:0 4px; }
 @keyframes slideIn { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
 
+/* ── Stats panel ── */
+#stats-panel {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 360px;
+  background: #0d1117; border-left: 1px solid #30363d;
+  transform: translateX(100%); transition: transform .25s ease;
+  z-index: 500; display: flex; flex-direction: column; overflow: hidden;
+}
+#stats-panel.open { transform: translateX(0); }
+.stats-close {
+  position: absolute; top: 10px; right: 12px; background: none; border: none;
+  color: #6e7681; font-size: 1.1rem; cursor: pointer; line-height:1;
+}
+.stats-close:hover { color: #f85149; }
+.sp-header { padding: 14px 36px 12px 16px; border-bottom: 1px solid #30363d; flex-shrink: 0; }
+.sp-title  { font-size: .9rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-sub    { font-size: .72rem; color: #6e7681; font-family: monospace; margin-top: 2px; }
+.sp-body   { overflow-y: auto; flex: 1; padding: 14px 16px; }
+.sp-section-title { font-size: .72rem; font-weight: 600; color: #6e7681; text-transform: uppercase; letter-spacing: .5px; margin: 14px 0 8px; }
+.sp-section-title:first-child { margin-top: 0; }
+.kpi-row { display: flex; gap: 8px; margin-bottom: 14px; }
+.kpi { flex: 1; background: #161b22; border: 1px solid #30363d; border-radius: 7px; padding: 8px 10px; text-align: center; }
+.kpi .kn { font-size: 1.4rem; font-weight: 700; color: #58a6ff; }
+.kpi .kl { font-size: .68rem; color: #6e7681; margin-top: 2px; }
+
+/* Mini bar chart */
+.bar-chart { display: flex; align-items: flex-end; gap: 4px; height: 60px; margin-bottom: 6px; }
+.bar-wrap  { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.bar       { width: 100%; border-radius: 3px 3px 0 0; min-height: 2px; transition: height .3s; }
+.bar-label { font-size: .6rem; color: #6e7681; }
+.bar-val   { font-size: .65rem; color: #8b949e; }
+
+/* Device list in stats panel */
+.dev-item { padding: 7px 0; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: 8px; }
+.dev-dot  { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.dev-info { flex: 1; min-width: 0; }
+.dev-name { font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dev-eui  { font-size: .68rem; color: #6e7681; font-family: monospace; }
+.dev-time { font-size: .67rem; color: #8b949e; margin-top: 1px; }
+.dev-app  { font-size: .65rem; color: #58a6ff; background: #0d1f3c; border: 1px solid #1f3a6e; border-radius: 8px; padding: 1px 5px; white-space: nowrap; }
+
 /* ── Scrollbar ── */
 ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-track{background:transparent} ::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px}
 .leaflet-popup-content-wrapper{background:#161b22;color:#e1e4e8;border:1px solid #30363d}
@@ -220,8 +260,21 @@ main { overflow: hidden; position: relative; }
       </div>
     </aside>
 
-    <!-- Map -->
-    <main><div id="map"></div></main>
+    <!-- Map + Stats panel -->
+    <main style="position:relative">
+      <div id="map"></div>
+      <!-- Stats panel (slides in from right) -->
+      <div id="stats-panel">
+        <button class="stats-close" onclick="closeStats()">✕</button>
+        <div class="sp-header">
+          <div class="sp-title" id="sp-gw-name">—</div>
+          <div class="sp-sub"  id="sp-gw-id">—</div>
+        </div>
+        <div class="sp-body" id="sp-body">
+          <div style="color:#6e7681;font-size:.82rem;text-align:center;padding:20px">Cargando…</div>
+        </div>
+      </div>
+    </main>
   </div>
 </div>
 
@@ -459,7 +512,127 @@ function focusGw(gw, el) {
   document.querySelectorAll('.gw-item').forEach(e=>e.classList.remove('selected'));
   el.classList.add('selected');
   const lat=parseFloat(gw.latitude)||0, lng=parseFloat(gw.longitude)||0;
-  if (lat||lng) { map.flyTo([lat,lng],14,{duration:1}); markers[gw.gateway_id]?.openPopup(); }
+  if (lat||lng) { map.flyTo([lat,lng],12,{duration:1}); markers[gw.gateway_id]?.openPopup(); }
+  openStats(gw);
+}
+
+// ── Stats panel ───────────────────────────────────────────────────────────────
+let statsGw = null;
+
+function closeStats() {
+  document.getElementById('stats-panel').classList.remove('open');
+  statsGw = null;
+  setTimeout(()=>map.invalidateSize(), 300);
+}
+
+async function openStats(gw) {
+  statsGw = gw;
+  document.getElementById('sp-gw-name').textContent = gw.name;
+  document.getElementById('sp-gw-id').textContent   = gw.gateway_id;
+  document.getElementById('sp-body').innerHTML = '<div style="color:#6e7681;font-size:.82rem;text-align:center;padding:20px">Cargando estadísticas…</div>';
+  document.getElementById('stats-panel').classList.add('open');
+  setTimeout(()=>map.invalidateSize(), 300);
+
+  try {
+    const [mR, dR] = await Promise.all([
+      fetch(`${API}/gateways/${gw.gateway_id}/metrics?days=7`, {headers:authHeaders()}),
+      fetch(`${API}/devices/all`, {headers:authHeaders()}),
+    ]);
+    const metrics = await mR.json();
+    const devData = await dR.json();
+    renderStats(gw, metrics, devData);
+  } catch(e) {
+    document.getElementById('sp-body').innerHTML = `<div style="color:#f85149;font-size:.82rem;padding:16px">Error: ${e.message}</div>`;
+  }
+}
+
+function renderStats(gw, metrics, devData) {
+  const stateColor = gw.state==='ONLINE'?'#56d364':gw.state==='OFFLINE'?'#f85149':'#6e7681';
+  const stateLabel = gw.state==='ONLINE'?'En línea':gw.state==='OFFLINE'?'Offline':'Sin datos';
+
+  // Bar chart
+  const rxDays = metrics.rx_per_day || [];
+  const txDays = metrics.tx_per_day || [];
+  const labels = metrics.timestamps || [];
+  const maxVal = Math.max(...rxDays, 1);
+
+  let barsHtml = labels.map((lbl, i) => {
+    const rx = rxDays[i] || 0;
+    const pct = Math.round((rx / maxVal) * 100);
+    return `<div class="bar-wrap">
+      <div class="bar-val">${rx||''}</div>
+      <div class="bar" style="height:${Math.max(pct,2)}%;background:#58a6ff88;border-top:2px solid #58a6ff"></div>
+      <div class="bar-label">${lbl}</div>
+    </div>`;
+  }).join('');
+
+  if (!barsHtml) barsHtml = '<div style="color:#6e7681;font-size:.78rem">Sin datos de métricas</div>';
+
+  // Devices — all sorted by last_seen
+  const devices = devData.devices || [];
+  const active24 = devices.filter(d=>d.active_24h);
+  const active7d  = devices.filter(d=>d.active_7d);
+
+  let devHtml = devices.slice(0, 50).map(d => {
+    const dotColor = d.active_24h ? '#56d364' : d.active_7d ? '#f0c040' : '#6e7681';
+    const ts = d.last_seen_at ? new Date(d.last_seen_at).toLocaleString('es-MX') : 'Nunca';
+    return `<div class="dev-item">
+      <div class="dev-dot" style="background:${dotColor};box-shadow:${d.active_24h?`0 0 5px ${dotColor}88`:'none'}"></div>
+      <div class="dev-info">
+        <div class="dev-name">${esc(d.name||d.dev_eui)}</div>
+        <div class="dev-eui">${esc(d.dev_eui)}</div>
+        <div class="dev-time">Visto: ${ts}</div>
+      </div>
+      <span class="dev-app" title="${esc(d.application_name)}">${esc((d.application_name||'').substring(0,10))}</span>
+    </div>`;
+  }).join('');
+
+  if (!devHtml) devHtml = '<div class="no-alerts">Sin dispositivos registrados</div>';
+
+  // DR breakdown
+  let drHtml = '';
+  const drData = metrics.rx_per_dr || {};
+  if (Object.keys(drData).length) {
+    const totalRx = Object.values(drData).reduce((a,v)=>a+v.reduce((s,n)=>s+n,0),0);
+    drHtml = `<div class="sp-section-title">📶 Distribución por Data Rate (7 días)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+        ${Object.entries(drData).map(([dr,vals])=>{
+          const tot=vals.reduce((s,n)=>s+n,0);
+          if(!tot) return '';
+          const pct=totalRx?Math.round(tot/totalRx*100):0;
+          return `<div style="background:#161b22;border:1px solid #30363d;border-radius:6px;padding:5px 10px;font-size:.75rem">
+            <span style="color:#58a6ff;font-weight:600">${esc(dr)}</span>
+            <span style="color:#8b949e;margin-left:4px">${tot} msgs (${pct}%)</span>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }
+
+  document.getElementById('sp-body').innerHTML = `
+    <div class="kpi-row">
+      <div class="kpi"><div class="kn" style="color:${stateColor}">${stateLabel}</div><div class="kl">Estado</div></div>
+      <div class="kpi"><div class="kn">${metrics.total_rx_7d||0}</div><div class="kl">RX 7 días</div></div>
+      <div class="kpi"><div class="kn">${metrics.total_tx_7d||0}</div><div class="kl">TX 7 días</div></div>
+    </div>
+
+    <div class="sp-section-title">📨 Mensajes recibidos (últimos 7 días)</div>
+    <div class="bar-chart">${barsHtml}</div>
+
+    ${drHtml}
+
+    <div class="sp-section-title">
+      📟 Dispositivos del tenant
+      <span style="margin-left:auto;display:inline-flex;gap:6px">
+        <span style="color:#56d364;font-size:.75rem">●${active24.length} hoy</span>
+        <span style="color:#f0c040;font-size:.75rem">●${active7d.length-active24.length} 7d</span>
+        <span style="color:#6e7681;font-size:.75rem">●${devices.length-active7d.length} inactivos</span>
+      </span>
+    </div>
+    <div style="font-size:.7rem;color:#6e7681;margin-bottom:8px">
+      Total: <strong style="color:#e1e4e8">${devData.total||0}</strong> dispositivos registrados
+    </div>
+    ${devHtml}
+  `;
 }
 
 // ── Alerts ────────────────────────────────────────────────────────────────────
