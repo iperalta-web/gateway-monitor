@@ -95,8 +95,20 @@ header {
 .badge-online  { background:#0d1f0d; color:#56d364; border:1px solid #238636; }
 .badge-offline { background:#1f0d0d; color:#f85149; border:1px solid #da3633; }
 .badge-never   { background:#1c2128; color:#6e7681; border:1px solid #30363d; }
-.gw-hidden .gw-name, .gw-hidden .gw-id, .gw-hidden .gw-time { opacity: 0.38; }
-.gw-hidden .gw-dot { opacity: 0.25; }
+.gw-hidden .gw-name, .gw-hidden .gw-id, .gw-hidden .gw-time { opacity: 0.35; }
+.gw-hidden .gw-dot { opacity: 0.2; }
+
+/* ── Gateway eye toggle ── */
+.gw-eye {
+  flex-shrink: 0; width: 28px; height: 28px; border-radius: 6px;
+  border: 1px solid #30363d; background: #161b22;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 14px; transition: background .15s, border-color .15s;
+  margin-top: 1px; user-select: none;
+}
+.gw-eye:hover { background: #21262d; border-color: #58a6ff55; }
+.gw-eye.hidden { background: #1c2128; border-color: #30363d; opacity: .45; }
+.gw-eye .eye-icon { transition: opacity .15s; }
 
 /* ── Alerts ── */
 .alerts-section { border-top: 1px solid #30363d; max-height: 190px; overflow-y: auto; flex-shrink: 0; }
@@ -350,7 +362,7 @@ let coveragePolygons = {};   // { gw_id: [ L.polygon, ... ] }
 let hiddenGateways = new Set(JSON.parse(localStorage.getItem('gw_hidden') || '[]'));
 let knownAlerts = 0;
 let coverageRadius  = parseInt(localStorage.getItem('gw_coverage_km')      || '5') * 1000;
-let coverageOpacity = parseFloat(localStorage.getItem('gw_coverage_opacity') || '0.5');
+let coverageOpacity = parseFloat(localStorage.getItem('gw_coverage_opacity') || '0.85');
 
 // ── Coverage polygon generator ───────────────────────────────────────────────
 // Seeded pseudo-random (so same gateway always gets same shape)
@@ -504,7 +516,7 @@ function showApp() {
   const savedKm = parseInt(localStorage.getItem('gw_coverage_km') || '5');
   document.getElementById('range-km').value = savedKm;
   document.getElementById('km-label').textContent = savedKm + ' km';
-  const savedOp = Math.round(parseFloat(localStorage.getItem('gw_coverage_opacity') || '0.5') * 10);
+  const savedOp = Math.round(parseFloat(localStorage.getItem('gw_coverage_opacity') || '0.85') * 10);
   document.getElementById('range-opacity').value = savedOp;
   document.getElementById('opacity-label').textContent = (savedOp * 10) + '%';
   startPolling();
@@ -562,10 +574,14 @@ function renderGateways(gws) {
     const el = document.createElement('div');
     el.className = 'gw-item'+(selectedGw===gw.gateway_id?' selected':'')+(isHidden?' gw-hidden':'');
     el.innerHTML = `
-      <input type="checkbox" class="gw-check" ${isHidden?'':'checked'}
-        title="Mostrar/ocultar en mapa"
-        style="accent-color:#58a6ff;width:15px;height:15px;cursor:pointer;flex-shrink:0;margin-top:3px"
-        onclick="event.stopPropagation();toggleGateway('${esc(gw.gateway_id)}',this.checked);this.closest('.gw-item').classList.toggle('gw-hidden',!this.checked)"/>
+      <div class="gw-eye${isHidden?' hidden':''}" title="${isHidden?'Mostrar en mapa':'Ocultar del mapa'}"
+        onclick="event.stopPropagation();
+          const h=this.classList.toggle('hidden');
+          toggleGateway('${esc(gw.gateway_id)}',!h);
+          this.closest('.gw-item').classList.toggle('gw-hidden',h);
+          this.title=h?'Mostrar en mapa':'Ocultar del mapa';">
+        <span class="eye-icon">${isHidden?'🚫':'👁'}</span>
+      </div>
       <div class="gw-dot ${dc}"></div>
       <div class="gw-info">
         <div class="gw-name">${esc(gw.name)}</div>
@@ -573,7 +589,7 @@ function renderGateways(gws) {
         <div class="gw-time">${ts}</div>
       </div>
       <span class="gw-badge ${bc}">${bl}</span>`;
-    el.onclick = (e) => { if(e.target.type==='checkbox') return; focusGw(gw, el); };
+    el.onclick = (e) => { if(e.target.closest('.gw-eye')) return; focusGw(gw, el); };
     list.appendChild(el);
     updateMarker(gw);
   });
@@ -901,20 +917,33 @@ function updateCoverageOpacity(val) {
   redrawAllCoverage();
 }
 
-function toggleGateway(gwId, checked) {
-  if (checked) {
-    hiddenGateways.delete(gwId);
-  } else {
-    hiddenGateways.add(gwId);
-  }
+function toggleGateway(gwId, show) {
+  if (show) hiddenGateways.delete(gwId);
+  else      hiddenGateways.add(gwId);
   localStorage.setItem('gw_hidden', JSON.stringify([...hiddenGateways]));
-  // Show/hide marker and coverage
+  // Show/hide marker
   if (markers[gwId]) {
-    if (checked) markers[gwId].addTo(map); else markers[gwId].remove();
+    if (show) markers[gwId].addTo(map); else markers[gwId].remove();
   }
-  if (coveragePolygons[gwId]) {
-    coveragePolygons[gwId].forEach(l => { if(checked) l.addTo(map); else l.remove(); });
+  // Show/hide coverage
+  if (show) {
+    // Rebuild coverage if needed
+    if (!coveragePolygons[gwId]) {
+      const gws = document.getElementById('gw-list').__gws || [];
+      const gw = gws.find(g => g.gateway_id === gwId);
+      if (gw) {
+        const layers = buildCoverageZones(gw, coverageRadius);
+        if (layers.length) { layers.forEach(l => l.addTo(map)); coveragePolygons[gwId] = layers; }
+      }
+    } else {
+      coveragePolygons[gwId].forEach(l => l.addTo(map));
+    }
+  } else {
+    if (coveragePolygons[gwId]) { coveragePolygons[gwId].forEach(l => l.remove()); }
   }
+  // Sync eye icon
+  const eyeEl = document.querySelector(`.gw-eye[onclick*="${gwId}"] .eye-icon`);
+  if (eyeEl) eyeEl.textContent = show ? '👁' : '🚫';
 }
 
 function openModal(id)  { document.getElementById(id).classList.add('open'); }
